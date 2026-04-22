@@ -9,7 +9,8 @@ function isEffectName(v: string): v is EffectName {
     v === "trail" ||
     v === "magnetic" ||
     v === "ring" ||
-    v === "magnifier"
+    v === "magnifier" ||
+    v === "invertRing"
   );
 }
 
@@ -68,6 +69,16 @@ function mountAll() {
             lensBrightness: 1.5,
             lensSaturate: 1.25,
             lensFillOpacity: 0.3,
+          }),
+        );
+        break;
+      case "invertRing":
+        destroyables.push(
+          createEffect("invertRing", cell, {
+            size: 44,
+            color: "rgba(165, 180, 252, 0.95)",
+            borderWidth: 2,
+            smoothing: 0.12,
           }),
         );
         break;

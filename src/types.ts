@@ -5,7 +5,8 @@ export type EffectName =
   | "trail"
   | "magnetic"
   | "ring"
-  | "magnifier";
+  | "magnifier"
+  | "invertRing";
 
 export type SpotlightOptions = {
   /** Spotlight hole radius in px */
@@ -52,4 +53,17 @@ export type MagnifierOptions = {
   lensSaturate?: number;
   /** 镜片背景透明度（0-1），默认 0.06 */
   lensFillOpacity?: number;
+};
+
+export type InvertRingOptions = {
+  size?: number;
+  color?: string;
+  borderWidth?: number;
+  /** Follow smoothing 0–1, higher = snappier */
+  smoothing?: number;
+  /**
+   * 反色混合模式（用于圈内的白色覆盖层）。
+   * 默认 `"difference"`（白色 difference = 反色）。
+   */
+  blendMode?: string;
 };

@@ -1,11 +1,13 @@
 import { mountMagnetic } from "./effects/magnetic";
 import { mountMagnifier } from "./effects/magnifier";
+import { mountInvertRing } from "./effects/invertRing";
 import { mountRing } from "./effects/ring";
 import { mountSpotlight } from "./effects/spotlight";
 import { mountTrail } from "./effects/trail";
 import type {
   Destroyable,
   EffectName,
+  InvertRingOptions,
   MagnifierOptions,
   MagneticOptions,
   RingOptions,
@@ -16,6 +18,7 @@ import type {
 export type {
   Destroyable,
   EffectName,
+  InvertRingOptions,
   MagnifierOptions,
   MagneticOptions,
   RingOptions,
@@ -51,6 +54,11 @@ export function createEffect(
   options?: MagnifierOptions,
 ): Destroyable;
 export function createEffect(
+  name: "invertRing",
+  target?: HTMLElement,
+  options?: InvertRingOptions,
+): Destroyable;
+export function createEffect(
   name: "ring",
   target?: HTMLElement,
   options?: RingOptions,
@@ -63,6 +71,7 @@ export function createEffect(
     | TrailOptions
     | MagneticOptions
     | MagnifierOptions
+    | InvertRingOptions
     | RingOptions,
 ): Destroyable {
   const root = resolveRoot(target);
@@ -75,6 +84,8 @@ export function createEffect(
       return mountMagnetic(root, options as MagneticOptions);
     case "magnifier":
       return mountMagnifier(root, options as MagnifierOptions);
+    case "invertRing":
+      return mountInvertRing(root, options as InvertRingOptions);
     case "ring":
       return mountRing(root, options as RingOptions);
     default: {

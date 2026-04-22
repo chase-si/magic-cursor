@@ -43,6 +43,21 @@
         background: radial-gradient(80% 80% at 50% 30%, rgba(99, 102, 241, 0.05), transparent 60%),
           linear-gradient(145deg, #0b1220 0%, #0f172a 100%);
       }
+      .cell[data-effect="invertRing"] {
+        background: conic-gradient(
+            from 210deg,
+            #ff004c,
+            #ff7a00,
+            #ffe600,
+            #00d084,
+            #00b3ff,
+            #7c3aed,
+            #ff004c
+          ),
+          radial-gradient(70% 70% at 30% 30%, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 60%),
+          linear-gradient(145deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+        background-blend-mode: screen, normal, normal;
+      }
       .cell-bg {
         position: absolute;
         inset: 0;
@@ -115,9 +130,9 @@
           <div class="cell-bg">magnifier</div>
           <div class="cell-meta">magnifier</div>
         </div>
-        <div class="cell" data-effect="">
-          <div class="cell-bg"></div>
-          <div class="cell-meta">empty</div>
+        <div class="cell" data-effect="invertRing">
+          <div class="cell-bg">invertRing</div>
+          <div class="cell-meta">invertRing</div>
         </div>
         <div class="cell" data-effect="">
           <div class="cell-bg"></div>
