@@ -13,8 +13,27 @@ export function mountRing(
   const borderWidth = options.borderWidth ?? 2;
   const smoothing = options.smoothing ?? 0.18;
 
-  const prevCursor = root.style.cursor;
-  root.style.cursor = "none";
+  const CURSOR_LOCK_KEY = "magicCursorCursorLocks";
+  const PREV_CURSOR_KEY = "magicCursorPrevCursor";
+  const acquireCursor = () => {
+    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
+    if (locks === 0) {
+      root.dataset[PREV_CURSOR_KEY] = root.style.cursor;
+      root.style.cursor = "none";
+    }
+    root.dataset[CURSOR_LOCK_KEY] = String(locks + 1);
+  };
+  const releaseCursor = () => {
+    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
+    const next = Math.max(0, locks - 1);
+    if (next === 0) {
+      root.style.cursor = root.dataset[PREV_CURSOR_KEY] ?? "";
+      delete root.dataset[PREV_CURSOR_KEY];
+      delete root.dataset[CURSOR_LOCK_KEY];
+    } else {
+      root.dataset[CURSOR_LOCK_KEY] = String(next);
+    }
+  };
 
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-ring": "",
@@ -28,6 +47,7 @@ export function mountRing(
   let targetY = 0;
   let raf = 0;
   let pressScale = 1;
+  let active = false;
 
   const draw = () => {
     const bw = canvas.width;
@@ -64,11 +84,60 @@ export function mountRing(
     }
   };
 
+  const clear = () => {
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
   const onMove = (e: PointerEvent) => {
     const rect = root.getBoundingClientRect();
     targetX = e.clientX - rect.left;
     targetY = e.clientY - rect.top;
     schedule();
+  };
+
+  const radius = size / 2;
+  const isWithinRingReach = (clientX: number, clientY: number) => {
+    const rect = root.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    return x >= -radius && x <= rect.width + radius && y >= -radius && y <= rect.height + radius;
+  };
+
+  const show = () => {
+    if (active) return;
+    active = true;
+    acquireCursor();
+    canvas.style.display = "";
+  };
+  const hide = () => {
+    if (!active) return;
+    active = false;
+    clear();
+    releaseCursor();
+    canvas.style.display = "none";
+    pressScale = 1;
+  };
+
+  const onWindowMove = (e: PointerEvent) => {
+    if (isWithinRingReach(e.clientX, e.clientY)) {
+      show();
+      onMove(e);
+    } else {
+      hide();
+    }
+  };
+  const onWindowBlur = () => {
+    hide();
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState !== "visible") {
+      hide();
+    }
   };
 
   const onDown = () => {
@@ -89,24 +158,33 @@ export function mountRing(
 
   const ro = observeRootResize(draw);
   root.appendChild(canvas);
-  root.addEventListener("pointermove", onMove);
+  canvas.style.display = "none";
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);
+  window.addEventListener("pointermove", onWindowMove);
+  window.addEventListener("blur", onWindowBlur);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   draw();
+  // 若挂载时指针已在“ring 可触达范围”内，立即显示
+  if (root.matches(":hover")) {
+    show();
+  }
 
   return {
     destroy() {
-      root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointermove", onWindowMove);
+      window.removeEventListener("blur", onWindowBlur);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (raf) {
         cancelAnimationFrame(raf);
       }
+      hide();
       ro.disconnect();
       canvas.remove();
       teardownLayout();
-      root.style.cursor = prevCursor;
     },
   };
 }

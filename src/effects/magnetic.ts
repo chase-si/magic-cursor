@@ -49,6 +49,10 @@ export function mountMagnetic(
   };
 
   const onLeave = () => {
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
     for (const { el, base } of items) {
       el.style.transform = base;
     }
@@ -56,11 +60,13 @@ export function mountMagnetic(
 
   root.addEventListener("pointermove", onMove);
   root.addEventListener("pointerleave", onLeave);
+  root.addEventListener("pointercancel", onLeave);
 
   return {
     destroy() {
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerleave", onLeave);
+      root.removeEventListener("pointercancel", onLeave);
       if (raf) {
         cancelAnimationFrame(raf);
       }

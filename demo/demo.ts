@@ -55,10 +55,10 @@ function mountAll() {
       case "smoke":
         destroyables.push(
           createEffect("smoke", cell, {
-            emission: 4,
+            emission: 100,
             size: 12,
-            lifeMs: 1500,
-            rise: 0.75,
+            lifeMs: 3000,
+            rise: 0.2,
             drift: 0.75,
             color: "rgba(226,232,240,0.22)",
           }),
@@ -103,7 +103,8 @@ function mountAll() {
             size: 44,
             color: "rgba(165, 180, 252, 0.95)",
             borderWidth: 2,
-            smoothing: 0.12,
+            smoothing: 0.9,
+            blendMode: "difference",
           }),
         );
         break;

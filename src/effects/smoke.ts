@@ -11,6 +11,7 @@ type Particle = {
   life: number;
   seed: number;
   trail: { x: number; y: number }[];
+  trailMax: number;
 };
 
 function rand(seed: number) {
@@ -38,7 +39,7 @@ export function mountSmoke(
   root: HTMLElement,
   options: SmokeOptions = {},
 ): Destroyable {
-  const emission = Math.max(1, options.emission ?? 2);
+  const emission = Math.max(1, options.emission ?? 3);
   const size = Math.max(4, options.size ?? 18);
   const lifeMs = Math.max(200, options.lifeMs ?? 1400);
   const rise = options.rise ?? 0.8;
@@ -64,30 +65,45 @@ export function mountSmoke(
   let velX = 0;
   let velY = 0;
   let dirty = false;
+  let emitting = true;
 
-  const TRAIL_LEN = 14;
+  const TRAIL_LEN_BASE = 22;
   const FLOW_FREQ = 0.016;
 
   const spawn = (t: number) => {
-    for (let i = 0; i < emission; i++) {
+    const speed = Math.hypot(velX, velY);
+    // 同一次生成中做“粒子簇”，方向略有差异，更像烟雾而非单根丝带
+    const burst = Math.min(10, Math.max(2, Math.round(emission + speed * 0.05)));
+    for (let i = 0; i < burst; i++) {
       seed = (seed * 1664525 + 1013904223) | 0;
       const u = rand(seed);
       seed = (seed * 1664525 + 1013904223) | 0;
       const v = rand(seed);
 
-      // 惯性：把鼠标速度向量注入到初速度（轻盈、顺着方向扩散）
+      // 惯性：把鼠标速度向量注入到初速度，并在方向上做细微抖动（让同簇粒子略分叉）
       const inertia = 0.18;
-      const vx = velX * inertia + (u - 0.5) * (0.22 + v * 0.26);
-      const vy = velY * inertia - (0.14 + v * 0.32);
+      const baseVx = velX * inertia + (u - 0.5) * (0.18 + v * 0.18);
+      const baseVy = velY * inertia - (0.14 + v * 0.32);
+      const angle = (u - 0.5) * (0.55 + speed * 0.0012);
+      const ca = Math.cos(angle);
+      const sa = Math.sin(angle);
+      const sp = 0.92 + v * 0.22;
+      const vx = (baseVx * ca - baseVy * sa) * sp;
+      const vy = (baseVx * sa + baseVy * ca) * sp;
 
       const x = targetX + (u - 0.5) * (size * 0.35);
       const y = targetY + (v - 0.5) * (size * 0.2);
       const trail: { x: number; y: number }[] = [];
-      // 让烟雾一生成就是“丝状”，而不是一团点：沿初速度反向回填轨迹
-      const backX = vx * 3.2;
-      const backY = vy * 3.2;
-      for (let k = 0; k < TRAIL_LEN; k++) {
-        const kk = (TRAIL_LEN - 1 - k) / (TRAIL_LEN - 1);
+      const trailMax = Math.min(
+        40,
+        Math.max(16, Math.round(TRAIL_LEN_BASE + speed * 0.06 + v * 6)),
+      );
+      // 让烟雾一生成就是“拖拽”态：沿初速度反向回填更长轨迹
+      const back = 3.6 + speed * 0.01;
+      const backX = vx * back;
+      const backY = vy * back;
+      for (let k = 0; k < trailMax; k++) {
+        const kk = (trailMax - 1 - k) / (trailMax - 1);
         trail.push({ x: x - backX * kk, y: y - backY * kk });
       }
 
@@ -101,6 +117,7 @@ export function mountSmoke(
         life: lifeMs * (0.75 + u * 0.8),
         seed: seed ^ (i * 2654435761),
         trail,
+        trailMax,
       });
     }
   };
@@ -136,9 +153,39 @@ export function mountSmoke(
         continue;
       }
 
+      // 尾部轻微波浪：跟随“惯性方向”(速度向量)的侧向随机摆动（尾部强、头部弱）
+      const tt = t * 0.001;
+      const vlen = Math.hypot(p.vx, p.vy);
+      const vdx = vlen > 1e-3 ? p.vx / vlen : 0;
+      const vdy = vlen > 1e-3 ? p.vy / vlen : 0;
+      const waveFreq = 4.2 + ((p.seed >>> 3) % 1000) / 1000;
+      const wavePhase = ((p.seed >>> 9) % 2048) * 0.01;
+      const wpts = pts.map((pt, j) => {
+        const prev = pts[Math.max(0, j - 1)]!;
+        const next = pts[Math.min(pts.length - 1, j + 1)]!;
+        const tx0 = next.x - prev.x;
+        const ty0 = next.y - prev.y;
+        const tlen0 = Math.hypot(tx0, ty0) || 1;
+        const tdx = tx0 / tlen0;
+        const tdy = ty0 / tlen0;
+
+        // 以速度方向为主，切线为辅（速度很小时自然退化为切线）
+        const mix = vlen > 1e-3 ? 0.78 : 0.0;
+        const dx = vdx * mix + tdx * (1 - mix);
+        const dy = vdy * mix + tdy * (1 - mix);
+        const dlen = Math.hypot(dx, dy) || 1;
+        const nx = -(dy / dlen);
+        const ny = dx / dlen;
+        const tailW = 1 - j / Math.max(1, pts.length - 1);
+        const amp = Math.min(3.2, Math.max(0.6, p.r * 0.11)) * tailW * (0.55 + 0.7 * alpha);
+        const phase = tt * waveFreq + j * (0.85 + ((p.seed >>> 5) % 100) / 600) + wavePhase;
+        const off = Math.sin(phase) * amp;
+        return { x: pt.x + nx * off, y: pt.y + ny * off };
+      });
+
       // stroke 的渐变沿轨迹方向（尾->头）
-      const tail = pts[0]!;
-      const head = pts[pts.length - 1]!;
+      const tail = wpts[0]!;
+      const head = wpts[wpts.length - 1]!;
       const g = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
       g.addColorStop(0, `rgba(${baseRgb.r},${baseRgb.g},${baseRgb.b},0)`);
       g.addColorStop(0.25, `rgba(${baseRgb.r},${baseRgb.g},${baseRgb.b},${0.06 * alpha})`);
@@ -148,13 +195,13 @@ export function mountSmoke(
       ctx.strokeStyle = g;
       ctx.lineWidth = Math.max(1, p.r * (0.22 + (1 - k) * 0.14));
       ctx.beginPath();
-      ctx.moveTo(pts[0]!.x, pts[0]!.y);
-      for (let j = 1; j < pts.length - 1; j++) {
-        const p0 = pts[j]!;
-        const p1 = pts[j + 1]!;
+      ctx.moveTo(wpts[0]!.x, wpts[0]!.y);
+      for (let j = 1; j < wpts.length - 1; j++) {
+        const p0 = wpts[j]!;
+        const p1 = wpts[j + 1]!;
         ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
       }
-      const last = pts[pts.length - 1]!;
+      const last = wpts[wpts.length - 1]!;
       ctx.lineTo(last.x, last.y);
       ctx.stroke();
     }
@@ -171,10 +218,10 @@ export function mountSmoke(
     const dt = lastT ? Math.min(32, t - lastT) : 16;
     lastT = t;
 
-    if (dirty) {
+    if (emitting && dirty) {
       dirty = false;
       spawn(t);
-    } else if (particles.length < 70) {
+    } else if (emitting && particles.length < 70) {
       spawn(t);
     }
 
@@ -202,7 +249,7 @@ export function mountSmoke(
 
       // 轨迹推进：尾巴跟随头部，形成丝带
       p.trail.push({ x: p.x, y: p.y });
-      while (p.trail.length > TRAIL_LEN) {
+      while (p.trail.length > p.trailMax) {
         p.trail.shift();
       }
     }
@@ -219,12 +266,44 @@ export function mountSmoke(
     }
   };
 
+  const clearImmediate = () => {
+    particles.length = 0;
+    lastT = 0;
+    dirty = false;
+    velX = 0;
+    velY = 0;
+    lastMoveT = 0;
+    emitting = false;
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const stopEmitting = () => {
+    emitting = false;
+    dirty = false;
+    velX = 0;
+    velY = 0;
+    lastMoveT = 0;
+    // 让现有粒子自然消散：继续跑到 particles 归零为止
+    if (particles.length) {
+      ensure();
+    } else {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+
   const onMove = (e: PointerEvent) => {
     const rect = root.getBoundingClientRect();
     const x = e.clientX - rect.left - root.clientLeft;
     const y = e.clientY - rect.top - root.clientTop;
     const now = performance.now();
 
+    emitting = true;
     const dt = lastMoveT ? Math.max(8, Math.min(40, now - lastMoveT)) : 16;
     const dx = x - lastMoveX;
     const dy = y - lastMoveY;
@@ -242,6 +321,10 @@ export function mountSmoke(
     ensure();
   };
 
+  const onLeave = () => {
+    stopEmitting();
+  };
+
   const ro = observeRootResize(() => {
     if (particles.length) {
       ensure();
@@ -249,6 +332,8 @@ export function mountSmoke(
   });
   root.appendChild(canvas);
   root.addEventListener("pointermove", onMove);
+  root.addEventListener("pointerleave", onLeave);
+  root.addEventListener("pointercancel", onLeave);
 
   dirty = true;
   ensure();
@@ -256,13 +341,12 @@ export function mountSmoke(
   return {
     destroy() {
       root.removeEventListener("pointermove", onMove);
-      if (raf) {
-        cancelAnimationFrame(raf);
-      }
+      root.removeEventListener("pointerleave", onLeave);
+      root.removeEventListener("pointercancel", onLeave);
+      clearImmediate();
       ro.disconnect();
       canvas.remove();
       teardownLayout();
-      particles.length = 0;
     },
   };
 }

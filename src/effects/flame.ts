@@ -155,12 +155,28 @@ export function mountFlame(
     }
   };
 
+  const clear = () => {
+    particles.length = 0;
+    lastT = 0;
+    dirty = false;
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
   const onMove = (e: PointerEvent) => {
     const rect = root.getBoundingClientRect();
     targetX = e.clientX - rect.left - root.clientLeft;
     targetY = e.clientY - rect.top - root.clientTop;
     dirty = true;
     ensure();
+  };
+
+  const onLeave = () => {
+    clear();
   };
 
   const ro = observeRootResize(() => {
@@ -170,6 +186,8 @@ export function mountFlame(
   });
   root.appendChild(canvas);
   root.addEventListener("pointermove", onMove);
+  root.addEventListener("pointerleave", onLeave);
+  root.addEventListener("pointercancel", onLeave);
 
   // 初始少量火焰
   dirty = true;
@@ -178,6 +196,8 @@ export function mountFlame(
   return {
     destroy() {
       root.removeEventListener("pointermove", onMove);
+      root.removeEventListener("pointerleave", onLeave);
+      root.removeEventListener("pointercancel", onLeave);
       if (raf) {
         cancelAnimationFrame(raf);
       }

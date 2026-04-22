@@ -14,8 +14,27 @@ export function mountInvertRing(
   const smoothing = options.smoothing ?? 0.18;
   const blendMode = options.blendMode ?? "difference";
 
-  const prevCursor = root.style.cursor;
-  root.style.cursor = "none";
+  const CURSOR_LOCK_KEY = "magicCursorCursorLocks";
+  const PREV_CURSOR_KEY = "magicCursorPrevCursor";
+  const acquireCursor = () => {
+    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
+    if (locks === 0) {
+      root.dataset[PREV_CURSOR_KEY] = root.style.cursor;
+      root.style.cursor = "none";
+    }
+    root.dataset[CURSOR_LOCK_KEY] = String(locks + 1);
+  };
+  const releaseCursor = () => {
+    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
+    const next = Math.max(0, locks - 1);
+    if (next === 0) {
+      root.style.cursor = root.dataset[PREV_CURSOR_KEY] ?? "";
+      delete root.dataset[PREV_CURSOR_KEY];
+      delete root.dataset[CURSOR_LOCK_KEY];
+    } else {
+      root.dataset[CURSOR_LOCK_KEY] = String(next);
+    }
+  };
 
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-invert-ring": "",
@@ -100,6 +119,14 @@ export function mountInvertRing(
   let targetY = 0;
   let raf = 0;
   let pressScale = 1;
+  let active = false;
+
+  const show = () => {
+    viewport.style.display = "";
+  };
+  const hide = () => {
+    viewport.style.display = "none";
+  };
 
   const update = () => {
     viewport.style.left = `${lx}px`;
@@ -148,11 +175,58 @@ export function mountInvertRing(
     }
   };
 
+  const clear = () => {
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
   const onMove = (e: PointerEvent) => {
     const rect = root.getBoundingClientRect();
     targetX = e.clientX - rect.left - root.clientLeft;
     targetY = e.clientY - rect.top - root.clientTop;
     schedule();
+  };
+
+  const radius = size / 2;
+  const isWithinRingReach = (clientX: number, clientY: number) => {
+    const rect = root.getBoundingClientRect();
+    const x = clientX - rect.left - root.clientLeft;
+    const y = clientY - rect.top - root.clientTop;
+    return x >= -radius && x <= rect.width + radius && y >= -radius && y <= rect.height + radius;
+  };
+
+  const activate = () => {
+    if (active) return;
+    active = true;
+    acquireCursor();
+    show();
+  };
+  const deactivate = () => {
+    if (!active) return;
+    active = false;
+    clear();
+    hide();
+    releaseCursor();
+  };
+  const onWindowMove = (e: PointerEvent) => {
+    if (isWithinRingReach(e.clientX, e.clientY)) {
+      activate();
+      onMove(e);
+    } else {
+      deactivate();
+    }
+  };
+  const onWindowBlur = () => {
+    deactivate();
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState !== "visible") {
+      deactivate();
+    }
   };
 
   const onDown = () => {
@@ -180,27 +254,36 @@ export function mountInvertRing(
   });
   root.appendChild(viewport);
   root.appendChild(canvas);
-  root.addEventListener("pointermove", onMove);
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);
+  window.addEventListener("pointermove", onWindowMove);
+  window.addEventListener("blur", onWindowBlur);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   syncContentSize();
   update();
   draw();
+  // 初始隐藏：避免未进入/离开状态下停留在中心
+  viewport.style.display = "none";
+  if (root.matches(":hover")) {
+    activate();
+  }
 
   return {
     destroy() {
-      root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointermove", onWindowMove);
+      window.removeEventListener("blur", onWindowBlur);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (raf) {
         cancelAnimationFrame(raf);
       }
+      deactivate();
       ro.disconnect();
       canvas.remove();
       viewport.remove();
       teardownLayout();
-      root.style.cursor = prevCursor;
     },
   };
 }
