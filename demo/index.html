@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>magic-cursor 演示</title>
+    <link rel="icon" type="image/png" href="/favicon.ico" />
+    <title>magic-cursor</title>
     <style>
       :root {
         font-family: system-ui, sans-serif;
@@ -24,67 +25,56 @@
         font-size: 1.5rem;
         font-weight: 600;
       }
-      p.lead {
-        margin: 0 0 1.5rem;
-        color: #94a3b8;
-        font-size: 0.95rem;
+      .grid-wrap {
+        width: min(980px, 100%);
       }
-      .toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-bottom: 1.25rem;
-        justify-content: center;
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
-      .toolbar button {
-        cursor: pointer;
-        border: 1px solid #334155;
-        background: #1e293b;
-        color: #e2e8f0;
-        padding: 0.45rem 0.9rem;
-        border-radius: 8px;
-        font-size: 0.875rem;
-      }
-      .toolbar button:hover {
-        background: #334155;
-      }
-      .toolbar button.active {
-        border-color: #6366f1;
-        background: #312e81;
-        color: #fff;
-      }
-      .stage-wrap {
-        width: min(720px, 100%);
-        border-radius: 12px;
+      .cell {
+        position: relative;
+        height: 240px;
         border: 1px solid #334155;
         overflow: hidden;
-        background: #020617;
-      }
-      .stage {
-        position: relative;
-        height: 420px;
         background: linear-gradient(145deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
       }
-      .stage-hint {
+      .cell[data-effect=""] {
+        background: radial-gradient(80% 80% at 50% 30%, rgba(99, 102, 241, 0.05), transparent 60%),
+          linear-gradient(145deg, #0b1220 0%, #0f172a 100%);
+      }
+      .cell-bg {
         position: absolute;
         inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #64748b;
-        font-size: 0.9rem;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-size: clamp(18px, 3.5vw, 44px);
+        color: rgba(226, 232, 240, 0.5);
         pointer-events: none;
+        user-select: none;
+      }
+      .cell-meta {
+        position: absolute;
+        left: 12px;
+        top: 10px;
+        font-size: 12px;
+        color: rgba(148, 163, 184, 0.75);
+        pointer-events: none;
+        user-select: none;
       }
       .magnetic-row {
         position: absolute;
         left: 50%;
-        top: 50%;
+        top: 52%;
         transform: translate(-50%, -50%);
         display: flex;
-        gap: 1rem;
+        gap: 0.65rem;
         flex-wrap: wrap;
         justify-content: center;
-        max-width: 90%;
+        max-width: 92%;
       }
       .magnetic-row .pill {
         padding: 0.65rem 1.1rem;
@@ -97,16 +87,49 @@
     </style>
   </head>
   <body>
-    <h1>magic-cursor</h1>
-    <p class="lead">选择一种指针效果，在下方区域内移动鼠标查看。</p>
-    <div class="toolbar" id="toolbar"></div>
-    <div class="stage-wrap">
-      <div class="stage" id="stage">
-        <div class="stage-hint" id="hint">移动鼠标体验效果</div>
-        <div class="magnetic-row" id="magneticRow" hidden>
-          <span class="pill" data-magnetic>吸引</span>
-          <span class="pill" data-magnetic>磁吸</span>
-          <span class="pill" data-magnetic>Hover</span>
+    <h1>Move your cursor to see the Effects</h1>
+    <div class="grid-wrap">
+      <div class="grid" id="grid">
+        <div class="cell" data-effect="spotlight">
+          <div class="cell-bg">spotlight</div>
+          <div class="cell-meta">spotlight</div>
+        </div>
+        <div class="cell" data-effect="trail">
+          <div class="cell-bg">trail</div>
+          <div class="cell-meta">trail</div>
+        </div>
+        <div class="cell" data-effect="magnetic">
+          <div class="cell-bg">magnetic</div>
+          <div class="cell-meta">magnetic</div>
+          <div class="magnetic-row">
+            <span class="pill" data-magnetic>吸引</span>
+            <span class="pill" data-magnetic>磁吸</span>
+            <span class="pill" data-magnetic>Hover</span>
+          </div>
+        </div>
+        <div class="cell" data-effect="ring">
+          <div class="cell-bg">ring</div>
+          <div class="cell-meta">ring</div>
+        </div>
+        <div class="cell" data-effect="">
+          <div class="cell-bg"></div>
+          <div class="cell-meta">empty</div>
+        </div>
+        <div class="cell" data-effect="">
+          <div class="cell-bg"></div>
+          <div class="cell-meta">empty</div>
+        </div>
+        <div class="cell" data-effect="">
+          <div class="cell-bg"></div>
+          <div class="cell-meta">empty</div>
+        </div>
+        <div class="cell" data-effect="">
+          <div class="cell-bg"></div>
+          <div class="cell-meta">empty</div>
+        </div>
+        <div class="cell" data-effect="">
+          <div class="cell-bg"></div>
+          <div class="cell-meta">empty</div>
         </div>
       </div>
     </div>
