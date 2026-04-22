@@ -1,5 +1,9 @@
 import type { Destroyable, RingOptions } from "../types";
+import { createCanvasLayer } from "../utils/canvas-layer";
 
+/**
+ * Canvas 圆环跟随；平滑插值、按下缩放与历史 DOM 版一致。
+ */
 export function mountRing(
   root: HTMLElement,
   options: RingOptions = {},
@@ -12,36 +16,43 @@ export function mountRing(
   const prevCursor = root.style.cursor;
   root.style.cursor = "none";
 
-  const ring = document.createElement("div");
-  ring.setAttribute("data-magic-cursor-ring", "");
-  ring.style.cssText = [
-    "position:absolute",
-    "pointer-events:none",
-    "border-radius:50%",
-    `width:${size}px`,
-    `height:${size}px`,
-    `border:${borderWidth}px solid ${color}`,
-    "box-sizing:border-box",
-    "z-index:2147483000",
-    "transform:translate(-50%,-50%) scale(1)",
-    "transition:transform 0.12s ease-out",
-    "left:0",
-    "top:0",
-    "will-change:transform,left,top",
-  ].join(";");
+  const layer = createCanvasLayer(root, {
+    "data-magic-cursor-ring": "",
+    "data-magic-cursor-ring-renderer": "canvas",
+  });
+  const { canvas, ctx, observeRootResize, teardownLayout } = layer;
 
   let lx = 0;
   let ly = 0;
   let targetX = 0;
   let targetY = 0;
   let raf = 0;
+  let pressScale = 1;
+
+  const draw = () => {
+    const bw = canvas.width;
+    const bh = canvas.height;
+    const dpr = layer.getDpr();
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, bw, bh);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const drawSize = size * pressScale;
+    const r = Math.max(0.5, drawSize / 2 - borderWidth / 2);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = borderWidth;
+    ctx.beginPath();
+    ctx.arc(lx, ly, r, 0, Math.PI * 2);
+    ctx.stroke();
+  };
 
   const tick = () => {
     raf = 0;
     lx += (targetX - lx) * smoothing;
     ly += (targetY - ly) * smoothing;
-    ring.style.left = `${lx}px`;
-    ring.style.top = `${ly}px`;
+    draw();
     if (Math.abs(targetX - lx) > 0.05 || Math.abs(targetY - ly) > 0.05) {
       raf = requestAnimationFrame(tick);
     }
@@ -55,30 +66,34 @@ export function mountRing(
 
   const onMove = (e: PointerEvent) => {
     const rect = root.getBoundingClientRect();
-    targetX = e.clientX - rect.left + root.scrollLeft;
-    targetY = e.clientY - rect.top + root.scrollTop;
+    targetX = e.clientX - rect.left;
+    targetY = e.clientY - rect.top;
     schedule();
   };
 
   const onDown = () => {
-    ring.style.transform = "translate(-50%,-50%) scale(0.85)";
+    pressScale = 0.85;
+    draw();
+    schedule();
   };
   const onUp = () => {
-    ring.style.transform = "translate(-50%,-50%) scale(1)";
+    pressScale = 1;
+    draw();
+    schedule();
   };
 
-  root.appendChild(ring);
+  lx = root.clientWidth / 2;
+  ly = root.clientHeight / 2;
+  targetX = lx;
+  targetY = ly;
+
+  const ro = observeRootResize(draw);
+  root.appendChild(canvas);
   root.addEventListener("pointermove", onMove);
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);
 
-  const rect0 = root.getBoundingClientRect();
-  lx = rect0.width / 2;
-  ly = rect0.height / 2;
-  targetX = lx;
-  targetY = ly;
-  ring.style.left = `${lx}px`;
-  ring.style.top = `${ly}px`;
+  draw();
 
   return {
     destroy() {
@@ -88,7 +103,9 @@ export function mountRing(
       if (raf) {
         cancelAnimationFrame(raf);
       }
-      ring.remove();
+      ro.disconnect();
+      canvas.remove();
+      teardownLayout();
       root.style.cursor = prevCursor;
     },
   };

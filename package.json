@@ -1,6 +1,9 @@
 {
   "name": "magic-cursor",
   "version": "0.1.0",
+  "author": "chase wu",
+  "email": "chase.wu@gmail.com",
+  "url": "https://github.com/chase-si/magic-cursor",
   "description": "Mouse cursor hover visual effects for the web",
   "type": "module",
   "main": "./dist/index.cjs",
