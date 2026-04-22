@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>magic-cursor 演示</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color: #e2e8f0;
+        background: #0f172a;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2rem 1rem 3rem;
+        box-sizing: border-box;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.5rem;
+        font-weight: 600;
+      }
+      p.lead {
+        margin: 0 0 1.5rem;
+        color: #94a3b8;
+        font-size: 0.95rem;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+        justify-content: center;
+      }
+      .toolbar button {
+        cursor: pointer;
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 0.45rem 0.9rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+      }
+      .toolbar button:hover {
+        background: #334155;
+      }
+      .toolbar button.active {
+        border-color: #6366f1;
+        background: #312e81;
+        color: #fff;
+      }
+      .stage-wrap {
+        width: min(720px, 100%);
+        border-radius: 12px;
+        border: 1px solid #334155;
+        overflow: hidden;
+        background: #020617;
+      }
+      .stage {
+        position: relative;
+        height: 420px;
+        background: linear-gradient(145deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+      }
+      .stage-hint {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #64748b;
+        font-size: 0.9rem;
+        pointer-events: none;
+      }
+      .magnetic-row {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        max-width: 90%;
+      }
+      .magnetic-row .pill {
+        padding: 0.65rem 1.1rem;
+        border-radius: 999px;
+        background: #312e81;
+        border: 1px solid #6366f1;
+        color: #e0e7ff;
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>magic-cursor</h1>
+    <p class="lead">选择一种指针效果，在下方区域内移动鼠标查看。</p>
+    <div class="toolbar" id="toolbar"></div>
+    <div class="stage-wrap">
+      <div class="stage" id="stage">
+        <div class="stage-hint" id="hint">移动鼠标体验效果</div>
+        <div class="magnetic-row" id="magneticRow" hidden>
+          <span class="pill" data-magnetic>吸引</span>
+          <span class="pill" data-magnetic>磁吸</span>
+          <span class="pill" data-magnetic>Hover</span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./demo.ts"></script>
+  </body>
+</html>

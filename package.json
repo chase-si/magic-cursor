@@ -1,0 +1,43 @@
+{
+  "name": "magic-cursor",
+  "version": "0.1.0",
+  "description": "Mouse cursor hover visual effects for the web",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build",
+    "demo": "vite --config vite.config.ts",
+    "demo:build": "vite build --config vite.config.ts"
+  },
+  "keywords": [
+    "cursor",
+    "mouse",
+    "hover",
+    "effect",
+    "animation"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.3"
+  }
+}
