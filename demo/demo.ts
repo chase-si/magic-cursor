@@ -4,7 +4,13 @@ const grid = document.getElementById("grid") as HTMLElement;
 const destroyables: Destroyable[] = [];
 
 function isEffectName(v: string): v is EffectName {
-  return v === "spotlight" || v === "trail" || v === "magnetic" || v === "ring";
+  return (
+    v === "spotlight" ||
+    v === "trail" ||
+    v === "magnetic" ||
+    v === "ring" ||
+    v === "magnifier"
+  );
 }
 
 function mountAll() {
@@ -25,17 +31,17 @@ function mountAll() {
       case "trail":
         destroyables.push(
           createEffect("trail", cell, {
-            color: "rgba(236, 72, 153, 0.95)",
+            color: "rgba(236, 72, 153, 0.5)",
             maxDots: 24,
-            size: 12,
-            throttleMs: 8,
+            size: 24,
+            throttleMs: 12,
           }),
         );
         break;
       case "magnetic":
         destroyables.push(
           createEffect("magnetic", cell, {
-            strength: 0.42,
+            strength: 0.6,
             selector: "[data-magnetic]",
           }),
         );
@@ -47,6 +53,21 @@ function mountAll() {
             color: "rgba(165, 180, 252, 0.95)",
             borderWidth: 2,
             smoothing: 0.22,
+          }),
+        );
+        break;
+      case "magnifier":
+        destroyables.push(
+          createEffect("magnifier", cell, {
+            size: 44,
+            color: "rgba(165, 180, 252, 0.95)",
+            borderWidth: 2,
+            zoom: 1.6,
+            smoothing: 0.1,
+            lensBlurPx: 2,
+            lensBrightness: 1.5,
+            lensSaturate: 1.25,
+            lensFillOpacity: 0.3,
           }),
         );
         break;
