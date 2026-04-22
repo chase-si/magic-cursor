@@ -3,6 +3,7 @@ import { mountMagnetic } from "./effects/magnetic";
 import { mountMagnifier } from "./effects/magnifier";
 import { mountInvertRing } from "./effects/invertRing";
 import { mountRing } from "./effects/ring";
+import { mountSmoke } from "./effects/smoke";
 import { mountSpotlight } from "./effects/spotlight";
 import { mountTrail } from "./effects/trail";
 import type {
@@ -13,6 +14,7 @@ import type {
   MagnifierOptions,
   MagneticOptions,
   RingOptions,
+  SmokeOptions,
   SpotlightOptions,
   TrailOptions,
 } from "./types";
@@ -25,6 +27,7 @@ export type {
   MagnifierOptions,
   MagneticOptions,
   RingOptions,
+  SmokeOptions,
   SpotlightOptions,
   TrailOptions,
 } from "./types";
@@ -50,6 +53,11 @@ export function createEffect(
   name: "flame",
   target?: HTMLElement,
   options?: FlameOptions,
+): Destroyable;
+export function createEffect(
+  name: "smoke",
+  target?: HTMLElement,
+  options?: SmokeOptions,
 ): Destroyable;
 export function createEffect(
   name: "magnetic",
@@ -78,6 +86,7 @@ export function createEffect(
     | SpotlightOptions
     | TrailOptions
     | FlameOptions
+    | SmokeOptions
     | MagneticOptions
     | MagnifierOptions
     | InvertRingOptions
@@ -91,6 +100,8 @@ export function createEffect(
       return mountTrail(root, options as TrailOptions);
     case "flame":
       return mountFlame(root, options as FlameOptions);
+    case "smoke":
+      return mountSmoke(root, options as SmokeOptions);
     case "magnetic":
       return mountMagnetic(root, options as MagneticOptions);
     case "magnifier":

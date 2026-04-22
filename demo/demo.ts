@@ -8,6 +8,7 @@ function isEffectName(v: string): v is EffectName {
     v === "spotlight" ||
     v === "trail" ||
     v === "flame" ||
+    v === "smoke" ||
     v === "magnetic" ||
     v === "ring" ||
     v === "magnifier" ||
@@ -48,6 +49,18 @@ function mountAll() {
             lifeMs: 720,
             rise: 1.7,
             jitter: 1,
+          }),
+        );
+        break;
+      case "smoke":
+        destroyables.push(
+          createEffect("smoke", cell, {
+            emission: 4,
+            size: 12,
+            lifeMs: 1500,
+            rise: 0.75,
+            drift: 0.75,
+            color: "rgba(226,232,240,0.22)",
           }),
         );
         break;

@@ -7,7 +7,8 @@ export type EffectName =
   | "ring"
   | "magnifier"
   | "invertRing"
-  | "flame";
+  | "flame"
+  | "smoke";
 
 export type SpotlightOptions = {
   /** Spotlight hole radius in px */
@@ -82,4 +83,19 @@ export type FlameOptions = {
   jitter?: number;
   /** DPR 上限（降低高分屏开销），默认 2 */
   maxDpr?: number;
+};
+
+export type SmokeOptions = {
+  /** 粒子发射强度（每次移动生成数量），默认 2 */
+  emission?: number;
+  /** 粒子大小（px），默认 18 */
+  size?: number;
+  /** 粒子寿命（ms），默认 1400 */
+  lifeMs?: number;
+  /** 上升速度（px / frame），默认 0.8 */
+  rise?: number;
+  /** 横向飘动幅度（px / frame），默认 0.7 */
+  drift?: number;
+  /** 烟雾颜色（rgba），默认 `rgba(226,232,240,0.18)` */
+  color?: string;
 };
