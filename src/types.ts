@@ -6,7 +6,8 @@ export type EffectName =
   | "magnetic"
   | "ring"
   | "magnifier"
-  | "invertRing";
+  | "invertRing"
+  | "flame";
 
 export type SpotlightOptions = {
   /** Spotlight hole radius in px */
@@ -66,4 +67,19 @@ export type InvertRingOptions = {
    * 默认 `"difference"`（白色 difference = 反色）。
    */
   blendMode?: string;
+};
+
+export type FlameOptions = {
+  /** 粒子发射强度（每次移动生成数量），默认 2 */
+  emission?: number;
+  /** 粒子大小（px），默认 10 */
+  size?: number;
+  /** 粒子寿命（ms），默认 700 */
+  lifeMs?: number;
+  /** 上升速度（px / frame），默认 1.6 */
+  rise?: number;
+  /** 横向抖动幅度（px / frame），默认 0.9 */
+  jitter?: number;
+  /** DPR 上限（降低高分屏开销），默认 2 */
+  maxDpr?: number;
 };

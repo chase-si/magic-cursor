@@ -1,3 +1,4 @@
+import { mountFlame } from "./effects/flame";
 import { mountMagnetic } from "./effects/magnetic";
 import { mountMagnifier } from "./effects/magnifier";
 import { mountInvertRing } from "./effects/invertRing";
@@ -7,6 +8,7 @@ import { mountTrail } from "./effects/trail";
 import type {
   Destroyable,
   EffectName,
+  FlameOptions,
   InvertRingOptions,
   MagnifierOptions,
   MagneticOptions,
@@ -18,6 +20,7 @@ import type {
 export type {
   Destroyable,
   EffectName,
+  FlameOptions,
   InvertRingOptions,
   MagnifierOptions,
   MagneticOptions,
@@ -42,6 +45,11 @@ export function createEffect(
   name: "trail",
   target?: HTMLElement,
   options?: TrailOptions,
+): Destroyable;
+export function createEffect(
+  name: "flame",
+  target?: HTMLElement,
+  options?: FlameOptions,
 ): Destroyable;
 export function createEffect(
   name: "magnetic",
@@ -69,6 +77,7 @@ export function createEffect(
   options?:
     | SpotlightOptions
     | TrailOptions
+    | FlameOptions
     | MagneticOptions
     | MagnifierOptions
     | InvertRingOptions
@@ -80,6 +89,8 @@ export function createEffect(
       return mountSpotlight(root, options as SpotlightOptions);
     case "trail":
       return mountTrail(root, options as TrailOptions);
+    case "flame":
+      return mountFlame(root, options as FlameOptions);
     case "magnetic":
       return mountMagnetic(root, options as MagneticOptions);
     case "magnifier":

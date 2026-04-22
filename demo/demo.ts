@@ -1,4 +1,4 @@
-import { createEffect, type Destroyable, type EffectName } from "magic-cursor";
+import { createEffect, type Destroyable, type EffectName } from "../src/index";
 
 const grid = document.getElementById("grid") as HTMLElement;
 const destroyables: Destroyable[] = [];
@@ -7,6 +7,7 @@ function isEffectName(v: string): v is EffectName {
   return (
     v === "spotlight" ||
     v === "trail" ||
+    v === "flame" ||
     v === "magnetic" ||
     v === "ring" ||
     v === "magnifier" ||
@@ -36,6 +37,17 @@ function mountAll() {
             maxDots: 24,
             size: 24,
             throttleMs: 12,
+          }),
+        );
+        break;
+      case "flame":
+        destroyables.push(
+          createEffect("flame", cell, {
+            emission: 2,
+            size: 12,
+            lifeMs: 720,
+            rise: 1.7,
+            jitter: 1,
           }),
         );
         break;
