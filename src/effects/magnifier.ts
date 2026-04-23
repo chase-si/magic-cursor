@@ -73,30 +73,79 @@ export function mountMagnifier(
     lensContent.style.height = `${h}px`;
   };
 
-  // 生成一次静态快照：背景 + 子节点（排除 magic-cursor 自己的 overlay）
+  // 生成一次静态快照：背景 + 子树（排除 magic-cursor 自己的 overlay）
   const computed = getComputedStyle(root);
+  const layout = document.createElement("div");
+  layout.setAttribute("data-magic-cursor-magnifier-layout", "");
+  // 关键：复刻 root 的布局/排版，避免普通文档流文本在镜片中错位或不可见
+  layout.className = root.className;
+  layout.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "pointer-events:none",
+    "isolation:isolate",
+    "background:transparent",
+  ].join(";");
+  lensContent.appendChild(layout);
+
+  const flow = document.createElement("div");
+  flow.setAttribute("data-magic-cursor-magnifier-flow", "");
+  flow.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "width:100%",
+    "height:100%",
+    "z-index:1",
+    `display:${computed.display}`,
+    `box-sizing:${computed.boxSizing}`,
+    `padding:${computed.paddingTop} ${computed.paddingRight} ${computed.paddingBottom} ${computed.paddingLeft}`,
+    `flex-direction:${computed.flexDirection}`,
+    `flex-wrap:${computed.flexWrap}`,
+    `justify-content:${computed.justifyContent}`,
+    `align-items:${computed.alignItems}`,
+    `align-content:${computed.alignContent}`,
+    `place-items:${computed.placeItems}`,
+    `place-content:${computed.placeContent}`,
+    `color:${computed.color}`,
+    `font:${computed.font}`,
+    `text-align:${computed.textAlign}`,
+    `line-height:${computed.lineHeight}`,
+    `letter-spacing:${computed.letterSpacing}`,
+    `white-space:${computed.whiteSpace}`,
+  ].join(";");
+  layout.appendChild(flow);
+
   const snapshot = document.createElement("div");
   snapshot.style.cssText = [
     "position:absolute",
     "inset:0",
     "pointer-events:none",
+    "z-index:0",
   ].join(";");
   snapshot.style.backgroundColor = computed.backgroundColor;
   snapshot.style.backgroundImage = computed.backgroundImage;
   snapshot.style.backgroundPosition = computed.backgroundPosition;
   snapshot.style.backgroundRepeat = computed.backgroundRepeat;
   snapshot.style.backgroundSize = computed.backgroundSize;
-  lensContent.appendChild(snapshot);
+  layout.appendChild(snapshot);
 
-  for (const child of Array.from(root.children)) {
-    const el = child as HTMLElement;
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent ?? "").trim().length === 0) continue;
+      flow.appendChild(node.cloneNode(true));
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+    const el = node as HTMLElement;
     if (el.dataset.magicCursorSpotlight !== undefined) continue;
     if (el.dataset.magicCursorTrail !== undefined) continue;
     if (el.dataset.magicCursorRing !== undefined) continue;
     if (el.dataset.magicCursorMagnifier !== undefined) continue;
     if (el.dataset.magicCursorMagnifierLens !== undefined) continue;
     if (el.dataset.magicCursorMagnifierContent !== undefined) continue;
-    lensContent.appendChild(el.cloneNode(true));
+    if (el.dataset.magicCursorInvertRing !== undefined) continue;
+    flow.appendChild(el.cloneNode(true));
   }
 
   lensViewport.appendChild(lensContent);
