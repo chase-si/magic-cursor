@@ -84,6 +84,8 @@ export function mountInvertRing(
         "position:absolute",
         "inset:0",
         "pointer-events:none",
+        "border-radius:inherit",
+        "overflow:hidden",
         // 使用实时背景反色，避免静态 clone 快照丢失文本/伪元素等问题
         "background:rgba(255,255,255,0.01)",
         "backdrop-filter:invert(1)",
@@ -93,6 +95,8 @@ export function mountInvertRing(
         "position:absolute",
         "inset:0",
         "pointer-events:none",
+        "border-radius:inherit",
+        "overflow:hidden",
         "background:#fff",
         // 回退到差值混合（静态快照方案）
         `mix-blend-mode:${blendMode}`,
