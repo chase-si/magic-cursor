@@ -73,6 +73,16 @@ export type InvertRingOptions = {
    * 不传时按 `blendMode` 选一个较合理的默认值（例如 `difference`→白、`screen`→黑）。
    */
   blendBackground?: string;
+  /**
+   * 为 true（默认）时，用 `elementFromPoint` 判断指针下最顶层节点是否在 `root` 内，
+   * 避免全屏遮罩、侧栏等盖住 `root` 时效果仍显示。
+   */
+  respectPointerOcclusion?: boolean;
+  /**
+   * `viewport` 的 z-index；`canvas` 描边为其 +1。默认 `2147482999`。
+   * 若希望效果叠在自定义浮层之下，请把浮层 z-index 设得更高，或把本值调低。
+   */
+  layerZIndex?: number;
 };
 
 export type FlameOptions = {

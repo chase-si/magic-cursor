@@ -42,6 +42,10 @@ export function mountInvertRing(
   const blendMode = options.blendMode ?? "difference";
   const blendBackground =
     options.blendBackground ?? defaultBlendBackground(blendMode);
+  const respectPointerOcclusion = options.respectPointerOcclusion !== false;
+  const layerZIndex = Number.isFinite(options.layerZIndex as number)
+    ? (options.layerZIndex as number)
+    : 2147482999;
 
   const CURSOR_LOCK_KEY = "magicCursorCursorLocks";
   const PREV_CURSOR_KEY = "magicCursorPrevCursor";
@@ -70,6 +74,7 @@ export function mountInvertRing(
     "data-magic-cursor-invert-ring-renderer": "canvas",
   });
   const { canvas, ctx, observeRootResize, teardownLayout } = layer;
+  canvas.style.zIndex = String(layerZIndex + 1);
 
   const viewport = document.createElement("div");
   viewport.setAttribute("data-magic-cursor-invert-ring-viewport", "");
@@ -86,7 +91,7 @@ export function mountInvertRing(
     `height:${size}px`,
     "transform:translate(-50%,-50%) scale(1)",
     "will-change:transform,left,top",
-    "z-index:2147482999",
+    `z-index:${layerZIndex}`,
   ].join(";");
 
   const content = document.createElement("div");
@@ -279,6 +284,14 @@ export function mountInvertRing(
     return x >= -radius && x <= rect.width + radius && y >= -radius && y <= rect.height + radius;
   };
 
+  /** 指针下实际命中是否在 root 子树内（跳过 pointer-events:none 的层后），避免被外部遮罩盖住仍触发 */
+  const pointerHitsRoot = (clientX: number, clientY: number) => {
+    if (!respectPointerOcclusion) return true;
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el) return false;
+    return el === root || root.contains(el);
+  };
+
   const activate = () => {
     if (active) return;
     active = true;
@@ -296,11 +309,23 @@ export function mountInvertRing(
     releaseCursor();
   };
   const onWindowMove = (e: PointerEvent) => {
+    if (!pointerHitsRoot(e.clientX, e.clientY)) {
+      deactivate();
+      return;
+    }
     if (isWithinRingReach(e.clientX, e.clientY)) {
       activate();
       onMove(e);
     } else {
       deactivate();
+    }
+  };
+
+  const onRootPointerEnter = (e: PointerEvent) => {
+    if (!pointerHitsRoot(e.clientX, e.clientY)) return;
+    if (isWithinRingReach(e.clientX, e.clientY)) {
+      activate();
+      onMove(e);
     }
   };
   const onWindowBlur = () => {
@@ -337,6 +362,7 @@ export function mountInvertRing(
   });
   root.appendChild(viewport);
   root.appendChild(canvas);
+  root.addEventListener("pointerenter", onRootPointerEnter);
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);
   window.addEventListener("pointermove", onWindowMove);
@@ -348,12 +374,10 @@ export function mountInvertRing(
   clear();
   // 初始隐藏：避免未进入/离开状态下停留在中心
   viewport.style.display = "none";
-  if (root.matches(":hover")) {
-    activate();
-  }
 
   return {
     destroy() {
+      root.removeEventListener("pointerenter", onRootPointerEnter);
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointermove", onWindowMove);
