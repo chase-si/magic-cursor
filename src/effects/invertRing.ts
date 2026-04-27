@@ -1,6 +1,33 @@
 import type { Destroyable, InvertRingOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
 
+/** 未指定 `blendBackground` 时，按常见混合模式给一层较合理的默认底色（仍可被 options 覆盖）。 */
+function defaultBlendBackground(blendMode: string): string {
+  const m = blendMode.trim().toLowerCase();
+  switch (m) {
+    case "difference":
+    case "exclusion":
+      return "#fff";
+    case "screen":
+    case "plus-lighter":
+      return "#000";
+    case "multiply":
+    case "darken":
+    case "color-burn":
+      // multiply 与 #fff 几乎不改变底层；用浅灰才能压暗
+      return "#c8c8c8";
+    case "overlay":
+    case "soft-light":
+    case "hard-light":
+      return "#808080";
+    case "lighten":
+    case "color-dodge":
+      return "#000";
+    default:
+      return "#fff";
+  }
+}
+
 /**
  * 反色圆环：圈内对内容做反色（静态快照），圈外保持原样。
  */
@@ -10,9 +37,11 @@ export function mountInvertRing(
 ): Destroyable {
   const size = options.size ?? 36;
   const color = options.color ?? "rgba(99, 102, 241, 0.9)";
-  const borderWidth = options.borderWidth ?? 2;
+  const borderWidth = options.borderWidth ?? 0;
   const smoothing = options.smoothing ?? 0.18;
   const blendMode = options.blendMode ?? "difference";
+  const blendBackground =
+    options.blendBackground ?? defaultBlendBackground(blendMode);
 
   const CURSOR_LOCK_KEY = "magicCursorCursorLocks";
   const PREV_CURSOR_KEY = "magicCursorPrevCursor";
@@ -72,35 +101,18 @@ export function mountInvertRing(
   ].join(";");
   viewport.appendChild(content);
 
-  const supportsBackdropInvert =
-    typeof CSS !== "undefined" &&
-    (CSS.supports("backdrop-filter", "invert(1)") ||
-      CSS.supports("-webkit-backdrop-filter", "invert(1)"));
-
   const invertLayer = document.createElement("div");
   invertLayer.setAttribute("data-magic-cursor-invert-ring-layer", "");
-  invertLayer.style.cssText = supportsBackdropInvert
-    ? [
-        "position:absolute",
-        "inset:0",
-        "pointer-events:none",
-        "border-radius:inherit",
-        "overflow:hidden",
-        // 使用实时背景反色，避免静态 clone 快照丢失文本/伪元素等问题
-        "background:rgba(255,255,255,0.01)",
-        "backdrop-filter:invert(1)",
-        "-webkit-backdrop-filter:invert(1)",
-      ].join(";")
-    : [
-        "position:absolute",
-        "inset:0",
-        "pointer-events:none",
-        "border-radius:inherit",
-        "overflow:hidden",
-        "background:#fff",
-        // 回退到差值混合（静态快照方案）
-        `mix-blend-mode:${blendMode}`,
-      ].join(";");
+  // mix-blend-mode：`blendBackground` 与底层镜像混合；默认随 `blendMode` 变化（如 difference→白、screen→黑）
+  invertLayer.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "pointer-events:none",
+    "border-radius:inherit",
+    "overflow:hidden",
+    `background:${blendBackground}`,
+    `mix-blend-mode:${blendMode}`,
+  ].join(";");
   viewport.appendChild(invertLayer);
 
   const syncContentSize = () => {
@@ -108,72 +120,77 @@ export function mountInvertRing(
     content.style.height = `${root.clientHeight}px`;
   };
 
-  if (!supportsBackdropInvert) {
-    const computed = getComputedStyle(root);
-    const layout = document.createElement("div");
-    layout.setAttribute("data-magic-cursor-invert-ring-layout", "");
-    // 关键点：快照需要复刻 root 的布局/排版，否则非 absolute 的文本会因布局丢失而不可见或严重错位
-    layout.className = root.className;
-    layout.style.cssText = [
-      "position:absolute",
-      "inset:0",
-      "pointer-events:none",
-      // background 已由 snapshot 单独处理（避免某些场景下重复混合）
-      "background:transparent",
-      // layout
-      `display:${computed.display}`,
-      `box-sizing:${computed.boxSizing}`,
-      `padding:${computed.paddingTop} ${computed.paddingRight} ${computed.paddingBottom} ${computed.paddingLeft}`,
-      // flex
-      `flex-direction:${computed.flexDirection}`,
-      `flex-wrap:${computed.flexWrap}`,
-      `justify-content:${computed.justifyContent}`,
-      `align-items:${computed.alignItems}`,
-      `align-content:${computed.alignContent}`,
-      // grid (when applicable)
-      `place-items:${computed.placeItems}`,
-      `place-content:${computed.placeContent}`,
-      // text / font
-      `color:${computed.color}`,
-      `font:${computed.font}`,
-      `text-align:${computed.textAlign}`,
-      `line-height:${computed.lineHeight}`,
-      `letter-spacing:${computed.letterSpacing}`,
-      `white-space:${computed.whiteSpace}`,
-    ].join(";");
-    content.appendChild(layout);
+  // mix-blend-mode 方案：构建静态镜像（背景在底、内容在上）用于圈内混合
+  const computed = getComputedStyle(root);
+  const layout = document.createElement("div");
+  layout.setAttribute("data-magic-cursor-invert-ring-layout", "");
+  layout.className = root.className;
+  layout.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "pointer-events:none",
+    "isolation:isolate",
+    "background:transparent",
+  ].join(";");
+  content.appendChild(layout);
 
-    const snapshot = document.createElement("div");
-    snapshot.style.cssText = [
-      "position:absolute",
-      "inset:0",
-      "pointer-events:none",
-    ].join(";");
-    snapshot.style.backgroundColor = computed.backgroundColor;
-    snapshot.style.backgroundImage = computed.backgroundImage;
-    snapshot.style.backgroundPosition = computed.backgroundPosition;
-    snapshot.style.backgroundRepeat = computed.backgroundRepeat;
-    snapshot.style.backgroundSize = computed.backgroundSize;
-    layout.appendChild(snapshot);
+  const snapshot = document.createElement("div");
+  snapshot.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "pointer-events:none",
+    "z-index:0",
+  ].join(";");
+  snapshot.style.backgroundColor = computed.backgroundColor;
+  snapshot.style.backgroundImage = computed.backgroundImage;
+  snapshot.style.backgroundPosition = computed.backgroundPosition;
+  snapshot.style.backgroundRepeat = computed.backgroundRepeat;
+  snapshot.style.backgroundSize = computed.backgroundSize;
+  layout.appendChild(snapshot);
 
-    for (const node of Array.from(root.childNodes)) {
-      // 允许 root 直接包含文本（非元素子节点）；否则会“看不到文本”
-      if (node.nodeType === Node.TEXT_NODE) {
-        // 保留空白/换行通常没有意义，但克隆不会影响性能；这里过滤掉纯空白
-        if ((node.textContent ?? "").trim().length === 0) continue;
-        layout.appendChild(node.cloneNode(true));
-        continue;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+  const flow = document.createElement("div");
+  flow.setAttribute("data-magic-cursor-invert-ring-flow", "");
+  flow.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "width:100%",
+    "height:100%",
+    "pointer-events:none",
+    "z-index:1",
+    `display:${computed.display}`,
+    `box-sizing:${computed.boxSizing}`,
+    `padding:${computed.paddingTop} ${computed.paddingRight} ${computed.paddingBottom} ${computed.paddingLeft}`,
+    `flex-direction:${computed.flexDirection}`,
+    `flex-wrap:${computed.flexWrap}`,
+    `justify-content:${computed.justifyContent}`,
+    `align-items:${computed.alignItems}`,
+    `align-content:${computed.alignContent}`,
+    `place-items:${computed.placeItems}`,
+    `place-content:${computed.placeContent}`,
+    `color:${computed.color}`,
+    `font:${computed.font}`,
+    `text-align:${computed.textAlign}`,
+    `line-height:${computed.lineHeight}`,
+    `letter-spacing:${computed.letterSpacing}`,
+    `white-space:${computed.whiteSpace}`,
+  ].join(";");
+  layout.appendChild(flow);
 
-      const el = node as HTMLElement;
-      if (el.dataset.magicCursorSpotlight !== undefined) continue;
-      if (el.dataset.magicCursorTrail !== undefined) continue;
-      if (el.dataset.magicCursorRing !== undefined) continue;
-      if (el.dataset.magicCursorMagnifier !== undefined) continue;
-      if (el.dataset.magicCursorInvertRing !== undefined) continue;
-      layout.appendChild(el.cloneNode(true));
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent ?? "").trim().length === 0) continue;
+      flow.appendChild(node.cloneNode(true));
+      continue;
     }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+    const el = node as HTMLElement;
+    if (el.dataset.magicCursorSpotlight !== undefined) continue;
+    if (el.dataset.magicCursorTrail !== undefined) continue;
+    if (el.dataset.magicCursorRing !== undefined) continue;
+    if (el.dataset.magicCursorMagnifier !== undefined) continue;
+    if (el.dataset.magicCursorInvertRing !== undefined) continue;
+    flow.appendChild(el.cloneNode(true));
   }
 
   let lx = 0;

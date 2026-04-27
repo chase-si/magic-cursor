@@ -104,7 +104,9 @@ function mountAll() {
             color: "rgba(165, 180, 252, 0.95)",
             borderWidth: 2,
             smoothing: 0.9,
+            blendBackground: "#fff",
             blendMode: "difference",
+            // blendMode: "screen",
           }),
         );
         break;

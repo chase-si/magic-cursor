@@ -68,6 +68,11 @@ export type InvertRingOptions = {
    * 默认 `"difference"`（白色 difference = 反色）。
    */
   blendMode?: string;
+  /**
+   * 与 `blendMode` 叠加的纯色/半透明底（圈内 `invertLayer` 的 background）。
+   * 不传时按 `blendMode` 选一个较合理的默认值（例如 `difference`→白、`screen`→黑）。
+   */
+  blendBackground?: string;
 };
 
 export type FlameOptions = {
