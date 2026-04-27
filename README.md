@@ -88,11 +88,18 @@ Exported types include `EffectName`, `Destroyable`, and per-effect `*Options` (e
   - `smoothing?: number` (0–1)
 - **`magnifier`**: magnifier (static snapshot + lens zoom)
   - `size?: number`
-  - `zoom?: number` (>= 1)
+  - `color?: string`
+  - `borderWidth?: number`
+  - `smoothing?: number` (0–1)
+  - `zoom?: number` (>= 1, default `1.6`)
   - `lensBlurPx?` / `lensBrightness?` / `lensSaturate?` / `lensFillOpacity?`
-- **`invertRing`**: inverted ring (in-ring invert via `mix-blend-mode`)
+- **`invertRing`**: inverted ring (in-ring blend via `mix-blend-mode` + static snapshot)
   - `size?: number`
+  - `color?: string` (ring stroke)
+  - `borderWidth?: number`
+  - `smoothing?: number` (0–1)
   - `blendMode?: string` (default `"difference"`)
+  - `blendBackground?: string` (solid / rgba for the blend overlay; if omitted, a sensible default is picked from `blendMode`, e.g. `difference`→white, `screen`→black)
 
 ### Framework / SSR notes
 
@@ -125,6 +132,7 @@ npm run build
 - **npm**：`magic-cursor-effect`
 - **Repo**：`https://github.com/chase-si/magic-cursor`
 - **Runtime**：Browser only（依赖 DOM/Canvas）
+
 ### 安装
 
 ```bash
@@ -204,11 +212,18 @@ fx.destroy();
   - `smoothing?: number`（0–1）
 - **`magnifier`**：放大镜（基于静态快照的圈内放大）
   - `size?: number`
-  - `zoom?: number`（>= 1）
+  - `color?: string`
+  - `borderWidth?: number`
+  - `smoothing?: number`（0–1）
+  - `zoom?: number`（>= 1，默认 `1.6`）
   - `lensBlurPx?` / `lensBrightness?` / `lensSaturate?` / `lensFillOpacity?`
-- **`invertRing`**：反色圆环（圈内反色，基于 `mix-blend-mode`）
+- **`invertRing`**：反色圆环（圈内混合，基于 `mix-blend-mode` + 静态快照）
   - `size?: number`
+  - `color?: string`（圆环描边）
+  - `borderWidth?: number`
+  - `smoothing?: number`（0–1）
   - `blendMode?: string`（默认 `"difference"`）
+  - `blendBackground?: string`（混合层底色；不传时按 `blendMode` 自动选默认值，如 `difference`→白、`screen`→黑）
 
 ### 框架/SSR 注意事项
 
