@@ -65,7 +65,8 @@ export function mountSmoke(
   let velX = 0;
   let velY = 0;
   let dirty = false;
-  let emitting = true;
+  /** 未进入/未移动前不发射，避免 init 时在容器中心出现烟雾 */
+  let emitting = false;
 
   const TRAIL_LEN_BASE = 22;
   const FLOW_FREQ = 0.016;
@@ -334,9 +335,6 @@ export function mountSmoke(
   root.addEventListener("pointermove", onMove);
   root.addEventListener("pointerleave", onLeave);
   root.addEventListener("pointercancel", onLeave);
-
-  dirty = true;
-  ensure();
 
   return {
     destroy() {

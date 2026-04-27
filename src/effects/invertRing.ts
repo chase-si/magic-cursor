@@ -284,6 +284,9 @@ export function mountInvertRing(
     active = true;
     acquireCursor();
     show();
+    // 仅激活后绘制描边；避免 init 时 canvas 已画环、viewport 隐藏仍露出描边
+    update();
+    draw();
   };
   const deactivate = () => {
     if (!active) return;
@@ -330,7 +333,7 @@ export function mountInvertRing(
   const ro = observeRootResize(() => {
     syncContentSize();
     update();
-    draw();
+    if (active) draw();
   });
   root.appendChild(viewport);
   root.appendChild(canvas);
@@ -342,7 +345,7 @@ export function mountInvertRing(
 
   syncContentSize();
   update();
-  draw();
+  clear();
   // 初始隐藏：避免未进入/离开状态下停留在中心
   viewport.style.display = "none";
   if (root.matches(":hover")) {
