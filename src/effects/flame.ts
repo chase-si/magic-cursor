@@ -1,5 +1,6 @@
 import type { Destroyable, FlameOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
 
 type Particle = {
   x: number;
@@ -168,9 +169,9 @@ export function mountFlame(
   };
 
   const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    targetX = e.clientX - rect.left - root.clientLeft;
-    targetY = e.clientY - rect.top - root.clientTop;
+    const point = pointerEventToMountRootPoint(root, e);
+    targetX = point.x;
+    targetY = point.y;
     dirty = true;
     ensure();
   };

@@ -1,5 +1,10 @@
 import type { Destroyable, RingOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import {
+  clientPointToMountRootPoint,
+  isWithinMountRootReach,
+  pointerEventToMountRootPoint,
+} from "../utils/mount-root-coordinates";
 
 /**
  * Canvas 圆环跟随；平滑插值、按下缩放与历史 DOM 版一致。
@@ -94,18 +99,16 @@ export function mountRing(
   };
 
   const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    targetX = e.clientX - rect.left;
-    targetY = e.clientY - rect.top;
+    const point = pointerEventToMountRootPoint(root, e);
+    targetX = point.x;
+    targetY = point.y;
     schedule();
   };
 
   const radius = size / 2;
   const isWithinRingReach = (clientX: number, clientY: number) => {
-    const rect = root.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-    return x >= -radius && x <= rect.width + radius && y >= -radius && y <= rect.height + radius;
+    const point = clientPointToMountRootPoint(root, { clientX, clientY });
+    return isWithinMountRootReach(root, point, radius);
   };
 
   const show = () => {

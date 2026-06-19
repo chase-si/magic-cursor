@@ -1,5 +1,6 @@
 import type { Destroyable, SmokeOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
 
 type Particle = {
   x: number;
@@ -299,9 +300,7 @@ export function mountSmoke(
   };
 
   const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    const x = e.clientX - rect.left - root.clientLeft;
-    const y = e.clientY - rect.top - root.clientTop;
+    const { x, y } = pointerEventToMountRootPoint(root, e);
     const now = performance.now();
 
     emitting = true;

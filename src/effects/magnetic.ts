@@ -1,4 +1,5 @@
 import type { Destroyable, MagneticOptions } from "../types";
+import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
 
 type Item = {
   el: HTMLElement;
@@ -27,8 +28,8 @@ export function mountMagnetic(
     for (const { el } of items) {
       const rect = el.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
-      const cx = rect.left - rootRect.left + rect.width / 2 + root.scrollLeft;
-      const cy = rect.top - rootRect.top + rect.height / 2 + root.scrollTop;
+      const cx = rect.left - rootRect.left - root.clientLeft + rect.width / 2 + root.scrollLeft;
+      const cy = rect.top - rootRect.top - root.clientTop + rect.height / 2 + root.scrollTop;
       const dx = (mx - cx) * strength;
       const dy = (my - cy) * strength;
       el.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -42,9 +43,9 @@ export function mountMagnetic(
   };
 
   const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    mx = e.clientX - rect.left + root.scrollLeft;
-    my = e.clientY - rect.top + root.scrollTop;
+    const point = pointerEventToMountRootPoint(root, e);
+    mx = point.x + root.scrollLeft;
+    my = point.y + root.scrollTop;
     schedule();
   };
 
