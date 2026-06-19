@@ -1,6 +1,7 @@
 import type { Destroyable, MagnifierOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
 import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
+import { acquireRootCursorLock } from "../utils/root-cursor-lock";
 import { createRootSnapshot } from "../utils/root-snapshot";
 
 /**
@@ -26,8 +27,7 @@ export function mountMagnifier(
   const lensSaturate = options.lensSaturate ?? 1.25;
   const lensFillOpacity = options.lensFillOpacity ?? 0.06;
 
-  const prevCursor = root.style.cursor;
-  root.style.cursor = "none";
+  const releaseCursorLock = acquireRootCursorLock(root);
 
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-magnifier": "",
@@ -168,7 +168,7 @@ export function mountMagnifier(
       canvas.remove();
       lensViewport.remove();
       teardownLayout();
-      root.style.cursor = prevCursor;
+      releaseCursorLock();
     },
   };
 }

@@ -5,6 +5,7 @@ import {
   isWithinMountRootReach,
   pointerEventToMountRootPoint,
 } from "../utils/mount-root-coordinates";
+import { acquireRootCursorLock } from "../utils/root-cursor-lock";
 import { createRootSnapshot } from "../utils/root-snapshot";
 
 /** 未指定 `blendBackground` 时，按常见混合模式给一层较合理的默认底色（仍可被 options 覆盖）。 */
@@ -52,28 +53,6 @@ export function mountInvertRing(
   const layerZIndex = Number.isFinite(options.layerZIndex as number)
     ? (options.layerZIndex as number)
     : 2147482999;
-
-  const CURSOR_LOCK_KEY = "magicCursorCursorLocks";
-  const PREV_CURSOR_KEY = "magicCursorPrevCursor";
-  const acquireCursor = () => {
-    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
-    if (locks === 0) {
-      root.dataset[PREV_CURSOR_KEY] = root.style.cursor;
-      root.style.cursor = "none";
-    }
-    root.dataset[CURSOR_LOCK_KEY] = String(locks + 1);
-  };
-  const releaseCursor = () => {
-    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
-    const next = Math.max(0, locks - 1);
-    if (next === 0) {
-      root.style.cursor = root.dataset[PREV_CURSOR_KEY] ?? "";
-      delete root.dataset[PREV_CURSOR_KEY];
-      delete root.dataset[CURSOR_LOCK_KEY];
-    } else {
-      root.dataset[CURSOR_LOCK_KEY] = String(next);
-    }
-  };
 
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-invert-ring": "",
@@ -125,6 +104,7 @@ export function mountInvertRing(
   let raf = 0;
   let pressScale = 1;
   let active = false;
+  let releaseCursorLock: (() => void) | undefined;
 
   const show = () => {
     viewport.style.display = "";
@@ -213,7 +193,7 @@ export function mountInvertRing(
   const activate = () => {
     if (active) return;
     active = true;
-    acquireCursor();
+    releaseCursorLock = acquireRootCursorLock(root);
     show();
     // 仅激活后绘制描边；避免 init 时 canvas 已画环、viewport 隐藏仍露出描边
     update();
@@ -224,7 +204,8 @@ export function mountInvertRing(
     active = false;
     clear();
     hide();
-    releaseCursor();
+    releaseCursorLock?.();
+    releaseCursorLock = undefined;
   };
   const onWindowMove = (e: PointerEvent) => {
     if (!pointerHitsRoot(e.clientX, e.clientY)) {
