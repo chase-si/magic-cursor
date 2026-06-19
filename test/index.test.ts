@@ -156,6 +156,54 @@ describe("createEffect", () => {
     expect(root.dataset.magicCursorCursorLocks).toBeUndefined();
   });
 
+  it("restores the original cursor after overlapping cursor-hiding effects release", () => {
+    const root = createRoot();
+    root.style.cursor = "help";
+    const magnifier = createEffect("magnifier", root);
+    const ring = createEffect("ring", root);
+
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 50, clientY: 60 }),
+    );
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("2");
+
+    magnifier.destroy();
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("1");
+
+    ring.destroy();
+
+    expect(root.style.cursor).toBe("help");
+    expect(root.dataset.magicCursorCursorLocks).toBeUndefined();
+  });
+
+  it("keeps the cursor hidden when an activated ring releases before a mounted magnifier", () => {
+    const root = createRoot();
+    root.style.cursor = "text";
+    const ring = createEffect("ring", root);
+
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 50, clientY: 60 }),
+    );
+    const magnifier = createEffect("magnifier", root);
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("2");
+
+    ring.destroy();
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("1");
+
+    magnifier.destroy();
+
+    expect(root.style.cursor).toBe("text");
+    expect(root.dataset.magicCursorCursorLocks).toBeUndefined();
+  });
+
   it("draws ring pointer coordinates from the Mount Root padding edge", () => {
     vi.mocked(requestAnimationFrame).mockImplementation((callback) => {
       callback(16);

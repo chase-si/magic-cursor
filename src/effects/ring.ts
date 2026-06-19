@@ -5,6 +5,7 @@ import {
   isWithinMountRootReach,
   pointerEventToMountRootPoint,
 } from "../utils/mount-root-coordinates";
+import { acquireRootCursorLock } from "../utils/root-cursor-lock";
 
 /**
  * Canvas 圆环跟随；平滑插值、按下缩放与历史 DOM 版一致。
@@ -17,28 +18,6 @@ export function mountRing(
   const color = options.color ?? "rgba(99, 102, 241, 0.9)";
   const borderWidth = options.borderWidth ?? 2;
   const smoothing = options.smoothing ?? 0.18;
-
-  const CURSOR_LOCK_KEY = "magicCursorCursorLocks";
-  const PREV_CURSOR_KEY = "magicCursorPrevCursor";
-  const acquireCursor = () => {
-    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
-    if (locks === 0) {
-      root.dataset[PREV_CURSOR_KEY] = root.style.cursor;
-      root.style.cursor = "none";
-    }
-    root.dataset[CURSOR_LOCK_KEY] = String(locks + 1);
-  };
-  const releaseCursor = () => {
-    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
-    const next = Math.max(0, locks - 1);
-    if (next === 0) {
-      root.style.cursor = root.dataset[PREV_CURSOR_KEY] ?? "";
-      delete root.dataset[PREV_CURSOR_KEY];
-      delete root.dataset[CURSOR_LOCK_KEY];
-    } else {
-      root.dataset[CURSOR_LOCK_KEY] = String(next);
-    }
-  };
 
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-ring": "",
@@ -53,6 +32,7 @@ export function mountRing(
   let raf = 0;
   let pressScale = 1;
   let active = false;
+  let releaseCursorLock: (() => void) | undefined;
 
   const draw = () => {
     const bw = canvas.width;
@@ -114,14 +94,15 @@ export function mountRing(
   const show = () => {
     if (active) return;
     active = true;
-    acquireCursor();
+    releaseCursorLock = acquireRootCursorLock(root);
     canvas.style.display = "";
   };
   const hide = () => {
     if (!active) return;
     active = false;
     clear();
-    releaseCursor();
+    releaseCursorLock?.();
+    releaseCursorLock = undefined;
     canvas.style.display = "none";
     pressScale = 1;
   };
