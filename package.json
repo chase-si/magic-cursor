@@ -28,7 +28,10 @@
     "build": "tsup",
     "prepublishOnly": "npm run build",
     "dev": "vite --config vite.config.ts",
-    "dev:build": "vite build --config vite.config.ts"
+    "dev:build": "vite build --config vite.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
   },
   "keywords": [
     "cursor",
@@ -39,8 +42,11 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.9",
+    "jsdom": "^29.1.1",
     "tsup": "^8.3.5",
     "typescript": "~5.7.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }
