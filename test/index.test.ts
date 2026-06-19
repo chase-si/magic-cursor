@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEffect, type EffectName } from "../src";
 
 type RectInit = {
+  borderLeft?: number;
+  borderTop?: number;
   width?: number;
   height?: number;
   left?: number;
@@ -9,6 +11,8 @@ type RectInit = {
 };
 
 function createRoot({
+  borderLeft = 0,
+  borderTop = 0,
   width = 240,
   height = 160,
   left = 10,
@@ -17,8 +21,8 @@ function createRoot({
   const root = document.createElement("div");
   Object.defineProperties(root, {
     clientHeight: { configurable: true, value: height },
-    clientLeft: { configurable: true, value: 0 },
-    clientTop: { configurable: true, value: 0 },
+    clientLeft: { configurable: true, value: borderLeft },
+    clientTop: { configurable: true, value: borderTop },
     clientWidth: { configurable: true, value: width },
   });
   root.getBoundingClientRect = vi.fn(
@@ -37,6 +41,14 @@ function createRoot({
   );
   document.body.appendChild(root);
   return root;
+}
+
+function latestCanvasContext() {
+  const getContext = vi.mocked(HTMLCanvasElement.prototype.getContext);
+  return getContext.mock.results.at(-1)?.value as {
+    arc: ReturnType<typeof vi.fn>;
+    createRadialGradient: ReturnType<typeof vi.fn>;
+  };
 }
 
 afterEach(() => {
@@ -142,6 +154,72 @@ describe("createEffect", () => {
 
     expect(root.style.cursor).toBe("pointer");
     expect(root.dataset.magicCursorCursorLocks).toBeUndefined();
+  });
+
+  it("draws ring pointer coordinates from the Mount Root padding edge", () => {
+    vi.mocked(requestAnimationFrame).mockImplementation((callback) => {
+      callback(16);
+      return 1;
+    });
+    const root = createRoot({ borderLeft: 7, borderTop: 11, left: 30, top: 40 });
+
+    const effect = createEffect("ring", root, { smoothing: 1 });
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 87, clientY: 109 }),
+    );
+
+    expect(latestCanvasContext().arc).toHaveBeenLastCalledWith(
+      50,
+      58,
+      expect.any(Number),
+      0,
+      Math.PI * 2,
+    );
+
+    effect.destroy();
+  });
+
+  it("draws spotlight pointer coordinates from the Mount Root padding edge", () => {
+    vi.mocked(requestAnimationFrame).mockImplementation((callback) => {
+      callback(16);
+      return 1;
+    });
+    const root = createRoot({ borderLeft: 7, borderTop: 11, left: 30, top: 40 });
+
+    const effect = createEffect("spotlight", root);
+    root.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 87, clientY: 109 }),
+    );
+
+    expect(latestCanvasContext().createRadialGradient).toHaveBeenLastCalledWith(
+      50,
+      58,
+      0,
+      50,
+      58,
+      expect.any(Number),
+    );
+
+    effect.destroy();
+  });
+
+  it("draws trail pointer coordinates from the Mount Root padding edge", () => {
+    const root = createRoot({ borderLeft: 7, borderTop: 11, left: 30, top: 40 });
+
+    const effect = createEffect("trail", root, { throttleMs: 0 });
+    root.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 87, clientY: 109 }),
+    );
+
+    expect(latestCanvasContext().arc).toHaveBeenLastCalledWith(
+      50,
+      58,
+      expect.any(Number),
+      0,
+      Math.PI * 2,
+    );
+
+    effect.destroy();
   });
 
   it("keeps cursor locks balanced for overlapping invert ring effects", () => {

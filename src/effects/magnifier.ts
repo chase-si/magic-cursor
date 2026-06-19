@@ -1,5 +1,6 @@
 import type { Destroyable, MagnifierOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
 import { createRootSnapshot } from "../utils/root-snapshot";
 
 /**
@@ -116,10 +117,9 @@ export function mountMagnifier(
   };
 
   const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    // 绝对定位子元素以 padding box 为参照；这里将坐标也转换到 content box 坐标系
-    targetX = e.clientX - rect.left - root.clientLeft;
-    targetY = e.clientY - rect.top - root.clientTop;
+    const point = pointerEventToMountRootPoint(root, e);
+    targetX = point.x;
+    targetY = point.y;
     schedule();
   };
 

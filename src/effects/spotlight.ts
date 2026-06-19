@@ -1,5 +1,6 @@
 import type { Destroyable, SpotlightOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
 
 /**
  * Canvas 叠加层；pointermove 经 rAF 合并，每帧最多绘制一次。
@@ -58,10 +59,11 @@ export function mountSpotlight(
       return;
     }
     dirty = false;
-    const rect = root.getBoundingClientRect();
-    const x = moveClientX - rect.left;
-    const y = moveClientY - rect.top;
-    draw(x, y);
+    const point = pointerEventToMountRootPoint(root, {
+      clientX: moveClientX,
+      clientY: moveClientY,
+    });
+    draw(point.x, point.y);
   };
 
   const onMove = (e: PointerEvent) => {

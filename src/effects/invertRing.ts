@@ -1,5 +1,10 @@
 import type { Destroyable, InvertRingOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import {
+  clientPointToMountRootPoint,
+  isWithinMountRootReach,
+  pointerEventToMountRootPoint,
+} from "../utils/mount-root-coordinates";
 import { createRootSnapshot } from "../utils/root-snapshot";
 
 /** 未指定 `blendBackground` 时，按常见混合模式给一层较合理的默认底色（仍可被 options 覆盖）。 */
@@ -185,18 +190,16 @@ export function mountInvertRing(
   };
 
   const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    targetX = e.clientX - rect.left - root.clientLeft;
-    targetY = e.clientY - rect.top - root.clientTop;
+    const point = pointerEventToMountRootPoint(root, e);
+    targetX = point.x;
+    targetY = point.y;
     schedule();
   };
 
   const radius = size / 2;
   const isWithinRingReach = (clientX: number, clientY: number) => {
-    const rect = root.getBoundingClientRect();
-    const x = clientX - rect.left - root.clientLeft;
-    const y = clientY - rect.top - root.clientTop;
-    return x >= -radius && x <= rect.width + radius && y >= -radius && y <= rect.height + radius;
+    const point = clientPointToMountRootPoint(root, { clientX, clientY });
+    return isWithinMountRootReach(root, point, radius);
   };
 
   /** 指针下实际命中是否在 root 子树内（跳过 pointer-events:none 的层后），避免被外部遮罩盖住仍触发 */
