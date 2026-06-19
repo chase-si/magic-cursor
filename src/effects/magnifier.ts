@@ -1,5 +1,6 @@
 import type { Destroyable, MagnifierOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import { createRootSnapshot } from "../utils/root-snapshot";
 
 /**
  * 放大镜效果（圈内放大）：
@@ -54,99 +55,8 @@ export function mountMagnifier(
     "z-index:2147482999",
   ].join(";");
 
-  const lensContent = document.createElement("div");
-  lensContent.setAttribute("data-magic-cursor-magnifier-content", "");
-  lensContent.style.cssText = [
-    "position:absolute",
-    "left:0",
-    "top:0",
-    "pointer-events:none",
-    "transform-origin:0 0",
-    "will-change:transform",
-  ].join(";");
-
-  const syncContentSize = () => {
-    // 关键：放大内容的坐标系必须与 root 一致（否则绝对定位/文字布局会错位）
-    const w = root.clientWidth;
-    const h = root.clientHeight;
-    lensContent.style.width = `${w}px`;
-    lensContent.style.height = `${h}px`;
-  };
-
-  // 生成一次静态快照：背景 + 子树（排除 magic-cursor 自己的 overlay）
-  const computed = getComputedStyle(root);
-  const layout = document.createElement("div");
-  layout.setAttribute("data-magic-cursor-magnifier-layout", "");
-  // 关键：复刻 root 的布局/排版，避免普通文档流文本在镜片中错位或不可见
-  layout.className = root.className;
-  layout.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "pointer-events:none",
-    "isolation:isolate",
-    "background:transparent",
-  ].join(";");
-  lensContent.appendChild(layout);
-
-  const flow = document.createElement("div");
-  flow.setAttribute("data-magic-cursor-magnifier-flow", "");
-  flow.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "width:100%",
-    "height:100%",
-    "z-index:1",
-    `display:${computed.display}`,
-    `box-sizing:${computed.boxSizing}`,
-    `padding:${computed.paddingTop} ${computed.paddingRight} ${computed.paddingBottom} ${computed.paddingLeft}`,
-    `flex-direction:${computed.flexDirection}`,
-    `flex-wrap:${computed.flexWrap}`,
-    `justify-content:${computed.justifyContent}`,
-    `align-items:${computed.alignItems}`,
-    `align-content:${computed.alignContent}`,
-    `place-items:${computed.placeItems}`,
-    `place-content:${computed.placeContent}`,
-    `color:${computed.color}`,
-    `font:${computed.font}`,
-    `text-align:${computed.textAlign}`,
-    `line-height:${computed.lineHeight}`,
-    `letter-spacing:${computed.letterSpacing}`,
-    `white-space:${computed.whiteSpace}`,
-  ].join(";");
-  layout.appendChild(flow);
-
-  const snapshot = document.createElement("div");
-  snapshot.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "pointer-events:none",
-    "z-index:0",
-  ].join(";");
-  snapshot.style.backgroundColor = computed.backgroundColor;
-  snapshot.style.backgroundImage = computed.backgroundImage;
-  snapshot.style.backgroundPosition = computed.backgroundPosition;
-  snapshot.style.backgroundRepeat = computed.backgroundRepeat;
-  snapshot.style.backgroundSize = computed.backgroundSize;
-  layout.appendChild(snapshot);
-
-  for (const node of Array.from(root.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      if ((node.textContent ?? "").trim().length === 0) continue;
-      flow.appendChild(node.cloneNode(true));
-      continue;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) continue;
-
-    const el = node as HTMLElement;
-    if (el.dataset.magicCursorSpotlight !== undefined) continue;
-    if (el.dataset.magicCursorTrail !== undefined) continue;
-    if (el.dataset.magicCursorRing !== undefined) continue;
-    if (el.dataset.magicCursorMagnifier !== undefined) continue;
-    if (el.dataset.magicCursorMagnifierLens !== undefined) continue;
-    if (el.dataset.magicCursorMagnifierContent !== undefined) continue;
-    if (el.dataset.magicCursorInvertRing !== undefined) continue;
-    flow.appendChild(el.cloneNode(true));
-  }
+  const rootSnapshot = createRootSnapshot(root);
+  const lensContent = rootSnapshot.element;
 
   lensViewport.appendChild(lensContent);
 
@@ -232,7 +142,7 @@ export function mountMagnifier(
   targetY = ly;
 
   const ro = observeRootResize(() => {
-    syncContentSize();
+    rootSnapshot.syncSize();
     updateLens();
     draw();
   });
@@ -242,7 +152,7 @@ export function mountMagnifier(
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);
 
-  syncContentSize();
+  rootSnapshot.syncSize();
   updateLens();
   draw();
 
