@@ -7,6 +7,7 @@ import {
 } from "../utils/circular-pointer-following";
 import { acquireRootCursorLock } from "../utils/root-cursor-lock";
 import { createRootSnapshot } from "../utils/root-snapshot";
+import { alignSnapshotLens } from "../utils/snapshot-lens-alignment";
 
 /** 未指定 `blendBackground` 时，按常见混合模式给一层较合理的默认底色（仍可被 options 覆盖）。 */
 function defaultBlendBackground(blendMode: string): string {
@@ -108,14 +109,10 @@ export function mountInvertRing(
 
   const update = () => {
     const { x: lx, y: ly } = following.getPosition();
-    const pressScale = following.getPressScale();
-    viewport.style.left = `${lx}px`;
-    viewport.style.top = `${ly}px`;
-    viewport.style.transform = `translate(-50%,-50%) scale(${pressScale})`;
-
-    const tx = size / 2 - lx;
-    const ty = size / 2 - ly;
-    content.style.transform = `translate(${tx}px, ${ty}px)`;
+    alignSnapshotLens(
+      { viewport, content, lensSize: size },
+      { x: lx, y: ly, pressScale: following.getPressScale() },
+    );
   };
 
   const draw = () => {
