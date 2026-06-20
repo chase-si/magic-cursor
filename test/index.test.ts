@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEffect, type EffectName } from "../src";
+import { createEffect } from "../src";
+import {
+  getEffectRegistration,
+  getRegisteredOverlaySmokeCases,
+} from "../src/effect-registry";
 
 type RectInit = {
   borderLeft?: number;
@@ -57,15 +61,10 @@ afterEach(() => {
 });
 
 describe("createEffect", () => {
-  it.each([
-    ["spotlight", "[data-magic-cursor-spotlight]"],
-    ["trail", "[data-magic-cursor-trail]"],
-    ["flame", "[data-magic-cursor-flame]"],
-    ["smoke", "[data-magic-cursor-smoke]"],
-    ["ring", "[data-magic-cursor-ring]"],
-    ["magnifier", "[data-magic-cursor-magnifier]"],
-    ["invertRing", "[data-magic-cursor-invert-ring]"],
-  ] satisfies Array<[EffectName, string]>)(
+  it.each(getRegisteredOverlaySmokeCases().map(({ name, overlaySelector }) => [
+    name,
+    overlaySelector,
+  ]))(
     "mounts and destroys the %s overlay",
     (name, selector) => {
       const root = createRoot();
@@ -83,6 +82,29 @@ describe("createEffect", () => {
     },
   );
 
+  it("mounts and destroys magnetic via the effect registry", () => {
+    vi.mocked(requestAnimationFrame).mockImplementation((callback) => {
+      callback(16);
+      return 1;
+    });
+    const root = createRoot();
+    const item = document.createElement("button");
+    item.dataset.magnetic = "";
+    root.appendChild(item);
+
+    const registration = getEffectRegistration("magnetic");
+    expect(registration).toBeDefined();
+
+    const effect = createEffect("magnetic", root);
+    root.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 50, clientY: 60, bubbles: true }),
+    );
+    expect(item.style.transform).toContain("translate");
+
+    effect.destroy();
+    expect(item.style.transform).toBe("");
+  });
+
   it("defaults to document.body when no target is passed", () => {
     const effect = createEffect("trail");
 
@@ -91,6 +113,13 @@ describe("createEffect", () => {
     effect.destroy();
 
     expect(document.body.querySelector("[data-magic-cursor-trail]")).toBeNull();
+  });
+
+  it("throws for unknown effect names", () => {
+    const root = createRoot();
+    expect(() =>
+      createEffect("not-a-real-effect" as "trail", root),
+    ).toThrow("Unknown effect: not-a-real-effect");
   });
 
   it("throws a browser-environment error when document is unavailable", () => {

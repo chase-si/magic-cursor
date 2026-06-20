@@ -1,14 +1,6 @@
-export type Destroyable = { destroy(): void };
+export type { EffectName } from "./effect-names";
 
-export type EffectName =
-  | "spotlight"
-  | "trail"
-  | "magnetic"
-  | "ring"
-  | "magnifier"
-  | "invertRing"
-  | "flame"
-  | "smoke";
+export type Destroyable = { destroy(): void };
 
 export type SpotlightOptions = {
   /** Spotlight hole radius in px */
