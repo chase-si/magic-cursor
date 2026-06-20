@@ -3,6 +3,7 @@ import { createCanvasLayer } from "../utils/canvas-layer";
 import { createCircularPointerFollowing } from "../utils/circular-pointer-following";
 import { acquireRootCursorLock } from "../utils/root-cursor-lock";
 import { createRootSnapshot } from "../utils/root-snapshot";
+import { alignSnapshotLens } from "../utils/snapshot-lens-alignment";
 
 /**
  * 放大镜效果（圈内放大）：
@@ -63,14 +64,15 @@ export function mountMagnifier(
 
   const updateLens = () => {
     const { x: lx, y: ly } = following.getPosition();
-    const pressScale = following.getPressScale();
-    lensViewport.style.left = `${lx}px`;
-    lensViewport.style.top = `${ly}px`;
-    lensViewport.style.transform = `translate(-50%,-50%) scale(${pressScale})`;
-
-    const tx = size / 2 - lx * zoom;
-    const ty = size / 2 - ly * zoom;
-    lensContent.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+    alignSnapshotLens(
+      {
+        viewport: lensViewport,
+        content: lensContent,
+        lensSize: size,
+        zoom,
+      },
+      { x: lx, y: ly, pressScale: following.getPressScale() },
+    );
   };
 
   const draw = () => {
