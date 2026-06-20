@@ -1,10 +1,10 @@
 import type { Destroyable, RingOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
 import {
-  clientPointToMountRootPoint,
-  isWithinMountRootReach,
-  pointerEventToMountRootPoint,
-} from "../utils/mount-root-coordinates";
+  bindRingReachPointerFollowing,
+  clearCircularFollowerCanvas,
+  createCircularPointerFollowing,
+} from "../utils/circular-pointer-following";
 import { acquireRootCursorLock } from "../utils/root-cursor-lock";
 
 /**
@@ -25,12 +25,6 @@ export function mountRing(
   });
   const { canvas, ctx, observeRootResize, teardownLayout } = layer;
 
-  let lx = 0;
-  let ly = 0;
-  let targetX = 0;
-  let targetY = 0;
-  let raf = 0;
-  let pressScale = 1;
   let active = false;
   let releaseCursorLock: (() => void) | undefined;
 
@@ -38,6 +32,8 @@ export function mountRing(
     const bw = canvas.width;
     const bh = canvas.height;
     const dpr = layer.getDpr();
+    const { x: lx, y: ly } = following.getPosition();
+    const pressScale = following.getPressScale();
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, bw, bh);
@@ -53,42 +49,15 @@ export function mountRing(
     ctx.stroke();
   };
 
-  const tick = () => {
-    raf = 0;
-    lx += (targetX - lx) * smoothing;
-    ly += (targetY - ly) * smoothing;
-    draw();
-    if (Math.abs(targetX - lx) > 0.05 || Math.abs(targetY - ly) > 0.05) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
-  const schedule = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
+  const following = createCircularPointerFollowing({
+    root,
+    smoothing,
+    onAnimate: draw,
+  });
 
   const clear = () => {
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  const onMove = (e: PointerEvent) => {
-    const point = pointerEventToMountRootPoint(root, e);
-    targetX = point.x;
-    targetY = point.y;
-    schedule();
-  };
-
-  const radius = size / 2;
-  const isWithinRingReach = (clientX: number, clientY: number) => {
-    const point = clientPointToMountRootPoint(root, { clientX, clientY });
-    return isWithinMountRootReach(root, point, radius);
+    following.cancelAnimation();
+    clearCircularFollowerCanvas(ctx, canvas);
   };
 
   const show = () => {
@@ -104,67 +73,31 @@ export function mountRing(
     releaseCursorLock?.();
     releaseCursorLock = undefined;
     canvas.style.display = "none";
-    pressScale = 1;
+    following.resetPressScale();
   };
 
-  const onWindowMove = (e: PointerEvent) => {
-    if (isWithinRingReach(e.clientX, e.clientY)) {
-      show();
-      onMove(e);
-    } else {
-      hide();
-    }
-  };
-  const onWindowBlur = () => {
-    hide();
-  };
-  const onVisibilityChange = () => {
-    if (document.visibilityState !== "visible") {
-      hide();
-    }
-  };
+  following.initializeFromRootCenter();
 
-  const onDown = () => {
-    pressScale = 0.85;
-    draw();
-    schedule();
-  };
-  const onUp = () => {
-    pressScale = 1;
-    draw();
-    schedule();
-  };
+  const reachBinding = bindRingReachPointerFollowing({
+    root,
+    radius: size / 2,
+    following,
+    onActivate: show,
+    onDeactivate: hide,
+    showWhenRootHovered: true,
+  });
 
-  lx = root.clientWidth / 2;
-  ly = root.clientHeight / 2;
-  targetX = lx;
-  targetY = ly;
-
-  const ro = observeRootResize(draw);
+  const ro = observeRootResize(() => {
+    reachBinding.onRootResize();
+  });
   root.appendChild(canvas);
   canvas.style.display = "none";
-  root.addEventListener("pointerdown", onDown);
-  root.addEventListener("pointerup", onUp);
-  window.addEventListener("pointermove", onWindowMove);
-  window.addEventListener("blur", onWindowBlur);
-  document.addEventListener("visibilitychange", onVisibilityChange);
 
   draw();
-  // 若挂载时指针已在“ring 可触达范围”内，立即显示
-  if (root.matches(":hover")) {
-    show();
-  }
 
   return {
     destroy() {
-      root.removeEventListener("pointerdown", onDown);
-      root.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointermove", onWindowMove);
-      window.removeEventListener("blur", onWindowBlur);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      if (raf) {
-        cancelAnimationFrame(raf);
-      }
+      reachBinding.destroy();
       hide();
       ro.disconnect();
       canvas.remove();

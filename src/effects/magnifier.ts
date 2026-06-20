@@ -1,6 +1,6 @@
 import type { Destroyable, MagnifierOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
-import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
+import { createCircularPointerFollowing } from "../utils/circular-pointer-following";
 import { acquireRootCursorLock } from "../utils/root-cursor-lock";
 import { createRootSnapshot } from "../utils/root-snapshot";
 
@@ -61,20 +61,13 @@ export function mountMagnifier(
 
   lensViewport.appendChild(lensContent);
 
-  let lx = 0;
-  let ly = 0;
-  let targetX = 0;
-  let targetY = 0;
-  let raf = 0;
-  let pressScale = 1;
-
   const updateLens = () => {
+    const { x: lx, y: ly } = following.getPosition();
+    const pressScale = following.getPressScale();
     lensViewport.style.left = `${lx}px`;
     lensViewport.style.top = `${ly}px`;
     lensViewport.style.transform = `translate(-50%,-50%) scale(${pressScale})`;
 
-    // 关键：将 “光标下的点” 放大后对齐到镜片中心
-    // x' = x*zoom + tx = size/2  => tx = size/2 - x*zoom
     const tx = size / 2 - lx * zoom;
     const ty = size / 2 - ly * zoom;
     lensContent.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
@@ -84,6 +77,8 @@ export function mountMagnifier(
     const bw = canvas.width;
     const bh = canvas.height;
     const dpr = layer.getDpr();
+    const { x: lx, y: ly } = following.getPosition();
+    const pressScale = following.getPressScale();
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, bw, bh);
@@ -99,52 +94,31 @@ export function mountMagnifier(
     ctx.stroke();
   };
 
-  const tick = () => {
-    raf = 0;
-    lx += (targetX - lx) * smoothing;
-    ly += (targetY - ly) * smoothing;
-    updateLens();
-    draw();
-    if (Math.abs(targetX - lx) > 0.05 || Math.abs(targetY - ly) > 0.05) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
-  const schedule = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
+  const following = createCircularPointerFollowing({
+    root,
+    smoothing,
+    onAnimate: () => {
+      updateLens();
+      draw();
+    },
+  });
 
   const onMove = (e: PointerEvent) => {
-    const point = pointerEventToMountRootPoint(root, e);
-    targetX = point.x;
-    targetY = point.y;
-    schedule();
+    following.followPointerEvent(e);
   };
 
   const onDown = () => {
-    pressScale = 0.85;
-    updateLens();
-    draw();
-    schedule();
+    following.handlePressStart();
   };
   const onUp = () => {
-    pressScale = 1;
-    updateLens();
-    draw();
-    schedule();
+    following.handlePressEnd();
   };
 
-  lx = root.clientWidth / 2;
-  ly = root.clientHeight / 2;
-  targetX = lx;
-  targetY = ly;
+  following.initializeFromRootCenter();
 
   const ro = observeRootResize(() => {
     rootSnapshot.syncSize();
-    updateLens();
-    draw();
+    following.redraw();
   });
   root.appendChild(lensViewport);
   root.appendChild(canvas);
@@ -153,17 +127,14 @@ export function mountMagnifier(
   root.addEventListener("pointerup", onUp);
 
   rootSnapshot.syncSize();
-  updateLens();
-  draw();
+  following.redraw();
 
   return {
     destroy() {
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointerup", onUp);
-      if (raf) {
-        cancelAnimationFrame(raf);
-      }
+      following.cancelAnimation();
       ro.disconnect();
       canvas.remove();
       lensViewport.remove();
@@ -172,4 +143,3 @@ export function mountMagnifier(
     },
   };
 }
-
