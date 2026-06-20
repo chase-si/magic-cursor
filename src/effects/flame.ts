@@ -1,6 +1,10 @@
 import type { Destroyable, FlameOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
-import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
+import {
+  bindParticleEffectPointerLifecycle,
+  clearParticleEffectCanvas,
+  createParticleEffectLifecycle,
+} from "../utils/particle-effect-lifecycle";
 
 type Particle = {
   x: number;
@@ -32,7 +36,6 @@ export function mountFlame(
   const rise = options.rise ?? 1.6;
   const jitter = options.jitter ?? 0.9;
 
-  // createCanvasLayer 内部默认 MAX_DPR=2；这里通过外层限制一次（不改 util）
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-flame": "",
     "data-magic-cursor-flame-renderer": "canvas",
@@ -40,14 +43,9 @@ export function mountFlame(
   const { canvas, ctx, observeRootResize, teardownLayout } = layer;
 
   const particles: Particle[] = [];
-  let raf = 0;
-  let lastT = 0;
   let seed = 1337;
-  let targetX = root.clientWidth / 2;
-  let targetY = root.clientHeight / 2;
-  let dirty = false;
 
-  const spawn = (t: number) => {
+  const spawn = (t: number, targetX: number, targetY: number) => {
     for (let i = 0; i < emission; i++) {
       seed = (seed * 1664525 + 1013904223) | 0;
       const u = rand(seed);
@@ -96,7 +94,6 @@ export function mountFlame(
       const heat = 1 - k;
       const rr = Math.max(1.5, p.r * (0.85 + heat * 0.55));
 
-      // 颜色：中心偏黄白 → 外圈橙红 → 透明
       const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr);
       g.addColorStop(0, `rgba(255, 250, 220, ${0.75 * alpha})`);
       g.addColorStop(0.35, `rgba(255, 170, 64, ${0.55 * alpha})`);
@@ -110,7 +107,6 @@ export function mountFlame(
     }
     ctx.globalCompositeOperation = "source-over";
 
-    // 轻微暗角（让火焰更突出）
     if (particles.length) {
       const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.1, w / 2, h / 2, Math.max(w, h) * 0.75);
       vignette.addColorStop(0, "rgba(0,0,0,0)");
@@ -120,88 +116,51 @@ export function mountFlame(
     }
   };
 
-  const tick = (t: number) => {
-    raf = 0;
-    const dt = lastT ? Math.min(32, t - lastT) : 16;
-    lastT = t;
+  const lifecycle = createParticleEffectLifecycle({
+    root,
+    hasParticles: () => particles.length > 0,
+    pointerLeaveBehavior: "clear",
+    onPointerLeaveClear: () => {
+      particles.length = 0;
+      clearParticleEffectCanvas(ctx, canvas);
+    },
+    initialDirty: true,
+    autoStart: true,
+    onFrame: ({ timestamp: t, deltaMs: dt, dirty: frameDirty, clearDirty }) => {
+      const { x: targetX, y: targetY } = lifecycle.getTarget();
+      if (frameDirty) {
+        clearDirty();
+        spawn(t, targetX, targetY);
+      } else if (particles.length < 80) {
+        spawn(t, targetX, targetY);
+      }
 
-    if (dirty) {
-      dirty = false;
-      spawn(t);
-    } else if (particles.length < 80) {
-      // 鼠标停住时也维持少量火焰闪烁
-      spawn(t);
-    }
+      for (const p of particles) {
+        const u = rand((p.seed = (p.seed * 1664525 + 1013904223) | 0));
+        p.vx += (u - 0.5) * (jitter * 0.02);
+        p.vx *= 0.98;
+        p.vy *= 0.992;
+        p.y += (p.vy - rise * 0.06) * (dt / 16);
+        p.x += p.vx * (dt / 16);
+      }
 
-    // 更新粒子
-    for (const p of particles) {
-      // 上升 + 抖动 + 衰减
-      const u = rand((p.seed = (p.seed * 1664525 + 1013904223) | 0));
-      p.vx += (u - 0.5) * (jitter * 0.02);
-      p.vx *= 0.98;
-      p.vy *= 0.992;
-      p.y += (p.vy - rise * 0.06) * (dt / 16);
-      p.x += p.vx * (dt / 16);
-    }
+      draw(t);
+    },
+  });
 
-    draw(t);
-    if (particles.length) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
-  const ensure = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
-  const clear = () => {
-    particles.length = 0;
-    lastT = 0;
-    dirty = false;
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  const onMove = (e: PointerEvent) => {
-    const point = pointerEventToMountRootPoint(root, e);
-    targetX = point.x;
-    targetY = point.y;
-    dirty = true;
-    ensure();
-  };
-
-  const onLeave = () => {
-    clear();
-  };
+  const pointerBinding = bindParticleEffectPointerLifecycle({
+    root,
+    lifecycle,
+  });
 
   const ro = observeRootResize(() => {
-    if (particles.length) {
-      ensure();
-    }
+    lifecycle.onRootResize();
   });
   root.appendChild(canvas);
-  root.addEventListener("pointermove", onMove);
-  root.addEventListener("pointerleave", onLeave);
-  root.addEventListener("pointercancel", onLeave);
-
-  // 初始少量火焰
-  dirty = true;
-  ensure();
 
   return {
     destroy() {
-      root.removeEventListener("pointermove", onMove);
-      root.removeEventListener("pointerleave", onLeave);
-      root.removeEventListener("pointercancel", onLeave);
-      if (raf) {
-        cancelAnimationFrame(raf);
-      }
+      pointerBinding.destroy();
       ro.disconnect();
       canvas.remove();
       teardownLayout();
@@ -209,4 +168,3 @@ export function mountFlame(
     },
   };
 }
-

@@ -1,5 +1,9 @@
 import type { Destroyable, SmokeOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import {
+  clearParticleEffectCanvas,
+  createParticleEffectLifecycle,
+} from "../utils/particle-effect-lifecycle";
 import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
 
 type Particle = {
@@ -55,26 +59,20 @@ export function mountSmoke(
   const { canvas, ctx, observeRootResize, teardownLayout } = layer;
 
   const particles: Particle[] = [];
-  let raf = 0;
-  let lastT = 0;
   let seed = 424242;
-  let targetX = root.clientWidth / 2;
-  let targetY = root.clientHeight / 2;
-  let lastMoveX = targetX;
-  let lastMoveY = targetY;
+  let lastMoveX = root.clientWidth / 2;
+  let lastMoveY = root.clientHeight / 2;
   let lastMoveT = 0;
   let velX = 0;
   let velY = 0;
-  let dirty = false;
   /** 未进入/未移动前不发射，避免 init 时在容器中心出现烟雾 */
   let emitting = false;
 
   const TRAIL_LEN_BASE = 22;
   const FLOW_FREQ = 0.016;
 
-  const spawn = (t: number) => {
+  const spawn = (t: number, targetX: number, targetY: number) => {
     const speed = Math.hypot(velX, velY);
-    // 同一次生成中做“粒子簇”，方向略有差异，更像烟雾而非单根丝带
     const burst = Math.min(10, Math.max(2, Math.round(emission + speed * 0.05)));
     for (let i = 0; i < burst; i++) {
       seed = (seed * 1664525 + 1013904223) | 0;
@@ -82,7 +80,6 @@ export function mountSmoke(
       seed = (seed * 1664525 + 1013904223) | 0;
       const v = rand(seed);
 
-      // 惯性：把鼠标速度向量注入到初速度，并在方向上做细微抖动（让同簇粒子略分叉）
       const inertia = 0.18;
       const baseVx = velX * inertia + (u - 0.5) * (0.18 + v * 0.18);
       const baseVy = velY * inertia - (0.14 + v * 0.32);
@@ -100,7 +97,6 @@ export function mountSmoke(
         40,
         Math.max(16, Math.round(TRAIL_LEN_BASE + speed * 0.06 + v * 6)),
       );
-      // 让烟雾一生成就是“拖拽”态：沿初速度反向回填更长轨迹
       const back = 3.6 + speed * 0.01;
       const backX = vx * back;
       const backY = vy * back;
@@ -148,14 +144,12 @@ export function mountSmoke(
         continue;
       }
 
-      // 丝带：按轨迹画平滑曲线，并沿长度渐隐
       const alpha = (1 - k) ** 1.9;
       const pts = p.trail;
       if (pts.length < 2) {
         continue;
       }
 
-      // 尾部轻微波浪：跟随“惯性方向”(速度向量)的侧向随机摆动（尾部强、头部弱）
       const tt = t * 0.001;
       const vlen = Math.hypot(p.vx, p.vy);
       const vdx = vlen > 1e-3 ? p.vx / vlen : 0;
@@ -171,7 +165,6 @@ export function mountSmoke(
         const tdx = tx0 / tlen0;
         const tdy = ty0 / tlen0;
 
-        // 以速度方向为主，切线为辅（速度很小时自然退化为切线）
         const mix = vlen > 1e-3 ? 0.78 : 0.0;
         const dx = vdx * mix + tdx * (1 - mix);
         const dy = vdy * mix + tdy * (1 - mix);
@@ -185,7 +178,6 @@ export function mountSmoke(
         return { x: pt.x + nx * off, y: pt.y + ny * off };
       });
 
-      // stroke 的渐变沿轨迹方向（尾->头）
       const tail = wpts[0]!;
       const head = wpts[wpts.length - 1]!;
       const g = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
@@ -208,96 +200,76 @@ export function mountSmoke(
       ctx.stroke();
     }
 
-    // 轻微整体雾化（让烟更“糊”）——丝带风格需要更弱
     if (particles.length) {
       ctx.fillStyle = `rgba(${baseRgb.r},${baseRgb.g},${baseRgb.b},0.006)`;
       ctx.fillRect(0, 0, w, h);
     }
   };
 
-  const tick = (t: number) => {
-    raf = 0;
-    const dt = lastT ? Math.min(32, t - lastT) : 16;
-    lastT = t;
-
-    if (emitting && dirty) {
-      dirty = false;
-      spawn(t);
-    } else if (emitting && particles.length < 70) {
-      spawn(t);
-    }
-
-    for (const p of particles) {
-      const u = rand((p.seed = (p.seed * 1664525 + 1013904223) | 0));
-      const tt = t * 0.001;
-      // 流场/涡旋噪声：制造“丝带飘动”的卷曲
-      const n1 =
-        Math.sin((p.x + p.seed * 0.01) * FLOW_FREQ + tt * 1.8) +
-        Math.cos((p.y - p.seed * 0.02) * FLOW_FREQ - tt * 1.4);
-      const n2 =
-        Math.cos((p.x - p.seed * 0.015) * (FLOW_FREQ * 1.07) - tt * 1.2) -
-        Math.sin((p.y + p.seed * 0.01) * (FLOW_FREQ * 0.93) + tt * 2.0);
-
-      const ax = (n1 * 0.06 + (u - 0.5) * 0.02) * drift;
-      const ay = (n2 * 0.035) * drift;
-
-      p.vx += ax;
-      p.vy += ay;
-      p.vx *= 0.985;
-      p.vy *= 0.99;
-
-      p.y += (p.vy - rise * 0.04) * (dt / 16);
-      p.x += p.vx * (dt / 16);
-
-      // 轨迹推进：尾巴跟随头部，形成丝带
-      p.trail.push({ x: p.x, y: p.y });
-      while (p.trail.length > p.trailMax) {
-        p.trail.shift();
-      }
-    }
-
-    draw(t);
-    if (particles.length) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
-  const ensure = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
   const clearImmediate = () => {
     particles.length = 0;
-    lastT = 0;
-    dirty = false;
     velX = 0;
     velY = 0;
     lastMoveT = 0;
     emitting = false;
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    lifecycle.cancelFrame();
+    clearParticleEffectCanvas(ctx, canvas);
   };
 
   const stopEmitting = () => {
     emitting = false;
-    dirty = false;
     velX = 0;
     velY = 0;
     lastMoveT = 0;
-    // 让现有粒子自然消散：继续跑到 particles 归零为止
-    if (particles.length) {
-      ensure();
-    } else {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!particles.length) {
+      clearParticleEffectCanvas(ctx, canvas);
     }
   };
+
+  const lifecycle = createParticleEffectLifecycle({
+    root,
+    hasParticles: () => particles.length > 0,
+    pointerLeaveBehavior: "fade",
+    onPointerLeaveFade: stopEmitting,
+    onFrame: ({ timestamp: t, deltaMs: dt, dirty: frameDirty, clearDirty }) => {
+      const { x: targetX, y: targetY } = lifecycle.getTarget();
+      if (emitting && frameDirty) {
+        clearDirty();
+        spawn(t, targetX, targetY);
+      } else if (emitting && particles.length < 70) {
+        spawn(t, targetX, targetY);
+      }
+
+      for (const p of particles) {
+        const u = rand((p.seed = (p.seed * 1664525 + 1013904223) | 0));
+        const tt = t * 0.001;
+        const n1 =
+          Math.sin((p.x + p.seed * 0.01) * FLOW_FREQ + tt * 1.8) +
+          Math.cos((p.y - p.seed * 0.02) * FLOW_FREQ - tt * 1.4);
+        const n2 =
+          Math.cos((p.x - p.seed * 0.015) * (FLOW_FREQ * 1.07) - tt * 1.2) -
+          Math.sin((p.y + p.seed * 0.01) * (FLOW_FREQ * 0.93) + tt * 2.0);
+
+        const ax = (n1 * 0.06 + (u - 0.5) * 0.02) * drift;
+        const ay = (n2 * 0.035) * drift;
+
+        p.vx += ax;
+        p.vy += ay;
+        p.vx *= 0.985;
+        p.vy *= 0.99;
+
+        p.y += (p.vy - rise * 0.04) * (dt / 16);
+        p.x += p.vx * (dt / 16);
+
+        p.trail.push({ x: p.x, y: p.y });
+        while (p.trail.length > p.trailMax) {
+          p.trail.shift();
+        }
+      }
+
+      draw(t);
+    },
+  });
 
   const onMove = (e: PointerEvent) => {
     const { x, y } = pointerEventToMountRootPoint(root, e);
@@ -308,27 +280,21 @@ export function mountSmoke(
     const dx = x - lastMoveX;
     const dy = y - lastMoveY;
 
-    // px / frame(16ms) 速度
     velX = (dx / dt) * 16;
     velY = (dy / dt) * 16;
     lastMoveX = x;
     lastMoveY = y;
     lastMoveT = now;
 
-    targetX = x;
-    targetY = y;
-    dirty = true;
-    ensure();
+    lifecycle.handlePointerMove(e);
   };
 
   const onLeave = () => {
-    stopEmitting();
+    lifecycle.handlePointerLeave();
   };
 
   const ro = observeRootResize(() => {
-    if (particles.length) {
-      ensure();
-    }
+    lifecycle.onRootResize();
   });
   root.appendChild(canvas);
   root.addEventListener("pointermove", onMove);
@@ -341,10 +307,10 @@ export function mountSmoke(
       root.removeEventListener("pointerleave", onLeave);
       root.removeEventListener("pointercancel", onLeave);
       clearImmediate();
+      lifecycle.destroy();
       ro.disconnect();
       canvas.remove();
       teardownLayout();
     },
   };
 }
-
