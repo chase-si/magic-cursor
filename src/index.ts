@@ -1,11 +1,4 @@
-import { mountFlame } from "./effects/flame";
-import { mountMagnetic } from "./effects/magnetic";
-import { mountMagnifier } from "./effects/magnifier";
-import { mountInvertRing } from "./effects/invertRing";
-import { mountRing } from "./effects/ring";
-import { mountSmoke } from "./effects/smoke";
-import { mountSpotlight } from "./effects/spotlight";
-import { mountTrail } from "./effects/trail";
+import { dispatchBuiltinEffect } from "./effect-registry";
 import type {
   Destroyable,
   EffectName,
@@ -93,26 +86,5 @@ export function createEffect(
     | RingOptions,
 ): Destroyable {
   const root = resolveRoot(target);
-  switch (name) {
-    case "spotlight":
-      return mountSpotlight(root, options as SpotlightOptions);
-    case "trail":
-      return mountTrail(root, options as TrailOptions);
-    case "flame":
-      return mountFlame(root, options as FlameOptions);
-    case "smoke":
-      return mountSmoke(root, options as SmokeOptions);
-    case "magnetic":
-      return mountMagnetic(root, options as MagneticOptions);
-    case "magnifier":
-      return mountMagnifier(root, options as MagnifierOptions);
-    case "invertRing":
-      return mountInvertRing(root, options as InvertRingOptions);
-    case "ring":
-      return mountRing(root, options as RingOptions);
-    default: {
-      const _never: never = name;
-      throw new Error(`Unknown effect: ${_never}`);
-    }
-  }
+  return dispatchBuiltinEffect(name, root, options);
 }

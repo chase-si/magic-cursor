@@ -1,5 +1,6 @@
 import type { Destroyable, TrailOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import { pointerEventToMountRootPoint } from "../utils/mount-root-coordinates";
 
 type TrailPoint = { x: number; y: number; size: number; opacity: number };
 
@@ -74,9 +75,7 @@ export function mountTrail(
     }
     last = now;
 
-    const rect = root.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { x, y } = pointerEventToMountRootPoint(root, e);
 
     points.push({ x, y, size, opacity: 1 });
     while (points.length > maxDots) {

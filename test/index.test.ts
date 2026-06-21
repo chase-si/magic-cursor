@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEffect, type EffectName } from "../src";
+import { createEffect } from "../src";
+import {
+  getEffectRegistration,
+  getRegisteredOverlaySmokeCases,
+} from "../src/effect-registry";
 
 type RectInit = {
+  borderLeft?: number;
+  borderTop?: number;
   width?: number;
   height?: number;
   left?: number;
@@ -9,6 +15,8 @@ type RectInit = {
 };
 
 function createRoot({
+  borderLeft = 0,
+  borderTop = 0,
   width = 240,
   height = 160,
   left = 10,
@@ -17,8 +25,8 @@ function createRoot({
   const root = document.createElement("div");
   Object.defineProperties(root, {
     clientHeight: { configurable: true, value: height },
-    clientLeft: { configurable: true, value: 0 },
-    clientTop: { configurable: true, value: 0 },
+    clientLeft: { configurable: true, value: borderLeft },
+    clientTop: { configurable: true, value: borderTop },
     clientWidth: { configurable: true, value: width },
   });
   root.getBoundingClientRect = vi.fn(
@@ -39,21 +47,24 @@ function createRoot({
   return root;
 }
 
+function latestCanvasContext() {
+  const getContext = vi.mocked(HTMLCanvasElement.prototype.getContext);
+  return getContext.mock.results.at(-1)?.value as {
+    arc: ReturnType<typeof vi.fn>;
+    createRadialGradient: ReturnType<typeof vi.fn>;
+  };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
 
 describe("createEffect", () => {
-  it.each([
-    ["spotlight", "[data-magic-cursor-spotlight]"],
-    ["trail", "[data-magic-cursor-trail]"],
-    ["flame", "[data-magic-cursor-flame]"],
-    ["smoke", "[data-magic-cursor-smoke]"],
-    ["ring", "[data-magic-cursor-ring]"],
-    ["magnifier", "[data-magic-cursor-magnifier]"],
-    ["invertRing", "[data-magic-cursor-invert-ring]"],
-  ] satisfies Array<[EffectName, string]>)(
+  it.each(getRegisteredOverlaySmokeCases().map(({ name, overlaySelector }) => [
+    name,
+    overlaySelector,
+  ]))(
     "mounts and destroys the %s overlay",
     (name, selector) => {
       const root = createRoot();
@@ -71,6 +82,29 @@ describe("createEffect", () => {
     },
   );
 
+  it("mounts and destroys magnetic via the effect registry", () => {
+    vi.mocked(requestAnimationFrame).mockImplementation((callback) => {
+      callback(16);
+      return 1;
+    });
+    const root = createRoot();
+    const item = document.createElement("button");
+    item.dataset.magnetic = "";
+    root.appendChild(item);
+
+    const registration = getEffectRegistration("magnetic");
+    expect(registration).toBeDefined();
+
+    const effect = createEffect("magnetic", root);
+    root.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 50, clientY: 60, bubbles: true }),
+    );
+    expect(item.style.transform).toContain("translate");
+
+    effect.destroy();
+    expect(item.style.transform).toBe("");
+  });
+
   it("defaults to document.body when no target is passed", () => {
     const effect = createEffect("trail");
 
@@ -79,6 +113,13 @@ describe("createEffect", () => {
     effect.destroy();
 
     expect(document.body.querySelector("[data-magic-cursor-trail]")).toBeNull();
+  });
+
+  it("throws for unknown effect names", () => {
+    const root = createRoot();
+    expect(() =>
+      createEffect("not-a-real-effect" as "trail", root),
+    ).toThrow("Unknown effect: not-a-real-effect");
   });
 
   it("throws a browser-environment error when document is unavailable", () => {
@@ -142,6 +183,120 @@ describe("createEffect", () => {
 
     expect(root.style.cursor).toBe("pointer");
     expect(root.dataset.magicCursorCursorLocks).toBeUndefined();
+  });
+
+  it("restores the original cursor after overlapping cursor-hiding effects release", () => {
+    const root = createRoot();
+    root.style.cursor = "help";
+    const magnifier = createEffect("magnifier", root);
+    const ring = createEffect("ring", root);
+
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 50, clientY: 60 }),
+    );
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("2");
+
+    magnifier.destroy();
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("1");
+
+    ring.destroy();
+
+    expect(root.style.cursor).toBe("help");
+    expect(root.dataset.magicCursorCursorLocks).toBeUndefined();
+  });
+
+  it("keeps the cursor hidden when an activated ring releases before a mounted magnifier", () => {
+    const root = createRoot();
+    root.style.cursor = "text";
+    const ring = createEffect("ring", root);
+
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 50, clientY: 60 }),
+    );
+    const magnifier = createEffect("magnifier", root);
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("2");
+
+    ring.destroy();
+
+    expect(root.style.cursor).toBe("none");
+    expect(root.dataset.magicCursorCursorLocks).toBe("1");
+
+    magnifier.destroy();
+
+    expect(root.style.cursor).toBe("text");
+    expect(root.dataset.magicCursorCursorLocks).toBeUndefined();
+  });
+
+  it("draws ring pointer coordinates from the Mount Root padding edge", () => {
+    vi.mocked(requestAnimationFrame).mockImplementation((callback) => {
+      callback(16);
+      return 1;
+    });
+    const root = createRoot({ borderLeft: 7, borderTop: 11, left: 30, top: 40 });
+
+    const effect = createEffect("ring", root, { smoothing: 1 });
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 87, clientY: 109 }),
+    );
+
+    expect(latestCanvasContext().arc).toHaveBeenLastCalledWith(
+      50,
+      58,
+      expect.any(Number),
+      0,
+      Math.PI * 2,
+    );
+
+    effect.destroy();
+  });
+
+  it("draws spotlight pointer coordinates from the Mount Root padding edge", () => {
+    vi.mocked(requestAnimationFrame).mockImplementation((callback) => {
+      callback(16);
+      return 1;
+    });
+    const root = createRoot({ borderLeft: 7, borderTop: 11, left: 30, top: 40 });
+
+    const effect = createEffect("spotlight", root);
+    root.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 87, clientY: 109 }),
+    );
+
+    expect(latestCanvasContext().createRadialGradient).toHaveBeenLastCalledWith(
+      50,
+      58,
+      0,
+      50,
+      58,
+      expect.any(Number),
+    );
+
+    effect.destroy();
+  });
+
+  it("draws trail pointer coordinates from the Mount Root padding edge", () => {
+    const root = createRoot({ borderLeft: 7, borderTop: 11, left: 30, top: 40 });
+
+    const effect = createEffect("trail", root, { throttleMs: 0 });
+    root.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 87, clientY: 109 }),
+    );
+
+    expect(latestCanvasContext().arc).toHaveBeenLastCalledWith(
+      50,
+      58,
+      expect.any(Number),
+      0,
+      Math.PI * 2,
+    );
+
+    effect.destroy();
   });
 
   it("keeps cursor locks balanced for overlapping invert ring effects", () => {

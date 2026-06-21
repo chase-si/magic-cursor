@@ -1,5 +1,13 @@
 import type { Destroyable, InvertRingOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import {
+  bindRingReachPointerFollowing,
+  clearCircularFollowerCanvas,
+  createCircularPointerFollowing,
+} from "../utils/circular-pointer-following";
+import { acquireRootCursorLock } from "../utils/root-cursor-lock";
+import { createRootSnapshot } from "../utils/root-snapshot";
+import { alignSnapshotLens } from "../utils/snapshot-lens-alignment";
 
 /** 未指定 `blendBackground` 时，按常见混合模式给一层较合理的默认底色（仍可被 options 覆盖）。 */
 function defaultBlendBackground(blendMode: string): string {
@@ -47,28 +55,6 @@ export function mountInvertRing(
     ? (options.layerZIndex as number)
     : 2147482999;
 
-  const CURSOR_LOCK_KEY = "magicCursorCursorLocks";
-  const PREV_CURSOR_KEY = "magicCursorPrevCursor";
-  const acquireCursor = () => {
-    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
-    if (locks === 0) {
-      root.dataset[PREV_CURSOR_KEY] = root.style.cursor;
-      root.style.cursor = "none";
-    }
-    root.dataset[CURSOR_LOCK_KEY] = String(locks + 1);
-  };
-  const releaseCursor = () => {
-    const locks = Number(root.dataset[CURSOR_LOCK_KEY] ?? 0) || 0;
-    const next = Math.max(0, locks - 1);
-    if (next === 0) {
-      root.style.cursor = root.dataset[PREV_CURSOR_KEY] ?? "";
-      delete root.dataset[PREV_CURSOR_KEY];
-      delete root.dataset[CURSOR_LOCK_KEY];
-    } else {
-      root.dataset[CURSOR_LOCK_KEY] = String(next);
-    }
-  };
-
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-invert-ring": "",
     "data-magic-cursor-invert-ring-renderer": "canvas",
@@ -94,21 +80,12 @@ export function mountInvertRing(
     `z-index:${layerZIndex}`,
   ].join(";");
 
-  const content = document.createElement("div");
-  content.setAttribute("data-magic-cursor-invert-ring-content", "");
-  content.style.cssText = [
-    "position:absolute",
-    "left:0",
-    "top:0",
-    "pointer-events:none",
-    "transform-origin:0 0",
-    "will-change:transform",
-  ].join(";");
+  const rootSnapshot = createRootSnapshot(root);
+  const content = rootSnapshot.element;
   viewport.appendChild(content);
 
   const invertLayer = document.createElement("div");
   invertLayer.setAttribute("data-magic-cursor-invert-ring-layer", "");
-  // mix-blend-mode：`blendBackground` 与底层镜像混合；默认随 `blendMode` 变化（如 difference→白、screen→黑）
   invertLayer.style.cssText = [
     "position:absolute",
     "inset:0",
@@ -120,91 +97,8 @@ export function mountInvertRing(
   ].join(";");
   viewport.appendChild(invertLayer);
 
-  const syncContentSize = () => {
-    content.style.width = `${root.clientWidth}px`;
-    content.style.height = `${root.clientHeight}px`;
-  };
-
-  // mix-blend-mode 方案：构建静态镜像（背景在底、内容在上）用于圈内混合
-  const computed = getComputedStyle(root);
-  const layout = document.createElement("div");
-  layout.setAttribute("data-magic-cursor-invert-ring-layout", "");
-  layout.className = root.className;
-  layout.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "pointer-events:none",
-    "isolation:isolate",
-    "background:transparent",
-  ].join(";");
-  content.appendChild(layout);
-
-  const snapshot = document.createElement("div");
-  snapshot.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "pointer-events:none",
-    "z-index:0",
-  ].join(";");
-  snapshot.style.backgroundColor = computed.backgroundColor;
-  snapshot.style.backgroundImage = computed.backgroundImage;
-  snapshot.style.backgroundPosition = computed.backgroundPosition;
-  snapshot.style.backgroundRepeat = computed.backgroundRepeat;
-  snapshot.style.backgroundSize = computed.backgroundSize;
-  layout.appendChild(snapshot);
-
-  const flow = document.createElement("div");
-  flow.setAttribute("data-magic-cursor-invert-ring-flow", "");
-  flow.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "width:100%",
-    "height:100%",
-    "pointer-events:none",
-    "z-index:1",
-    `display:${computed.display}`,
-    `box-sizing:${computed.boxSizing}`,
-    `padding:${computed.paddingTop} ${computed.paddingRight} ${computed.paddingBottom} ${computed.paddingLeft}`,
-    `flex-direction:${computed.flexDirection}`,
-    `flex-wrap:${computed.flexWrap}`,
-    `justify-content:${computed.justifyContent}`,
-    `align-items:${computed.alignItems}`,
-    `align-content:${computed.alignContent}`,
-    `place-items:${computed.placeItems}`,
-    `place-content:${computed.placeContent}`,
-    `color:${computed.color}`,
-    `font:${computed.font}`,
-    `text-align:${computed.textAlign}`,
-    `line-height:${computed.lineHeight}`,
-    `letter-spacing:${computed.letterSpacing}`,
-    `white-space:${computed.whiteSpace}`,
-  ].join(";");
-  layout.appendChild(flow);
-
-  for (const node of Array.from(root.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      if ((node.textContent ?? "").trim().length === 0) continue;
-      flow.appendChild(node.cloneNode(true));
-      continue;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) continue;
-
-    const el = node as HTMLElement;
-    if (el.dataset.magicCursorSpotlight !== undefined) continue;
-    if (el.dataset.magicCursorTrail !== undefined) continue;
-    if (el.dataset.magicCursorRing !== undefined) continue;
-    if (el.dataset.magicCursorMagnifier !== undefined) continue;
-    if (el.dataset.magicCursorInvertRing !== undefined) continue;
-    flow.appendChild(el.cloneNode(true));
-  }
-
-  let lx = 0;
-  let ly = 0;
-  let targetX = 0;
-  let targetY = 0;
-  let raf = 0;
-  let pressScale = 1;
   let active = false;
+  let releaseCursorLock: (() => void) | undefined;
 
   const show = () => {
     viewport.style.display = "";
@@ -214,20 +108,19 @@ export function mountInvertRing(
   };
 
   const update = () => {
-    viewport.style.left = `${lx}px`;
-    viewport.style.top = `${ly}px`;
-    viewport.style.transform = `translate(-50%,-50%) scale(${pressScale})`;
-
-    // 将光标点对齐到 viewport 中心（不缩放，zoom=1）
-    const tx = size / 2 - lx;
-    const ty = size / 2 - ly;
-    content.style.transform = `translate(${tx}px, ${ty}px)`;
+    const { x: lx, y: ly } = following.getPosition();
+    alignSnapshotLens(
+      { viewport, content, lensSize: size },
+      { x: lx, y: ly, pressScale: following.getPressScale() },
+    );
   };
 
   const draw = () => {
     const bw = canvas.width;
     const bh = canvas.height;
     const dpr = layer.getDpr();
+    const { x: lx, y: ly } = following.getPosition();
+    const pressScale = following.getPressScale();
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, bw, bh);
@@ -243,45 +136,18 @@ export function mountInvertRing(
     ctx.stroke();
   };
 
-  const tick = () => {
-    raf = 0;
-    lx += (targetX - lx) * smoothing;
-    ly += (targetY - ly) * smoothing;
-    update();
-    draw();
-    if (Math.abs(targetX - lx) > 0.05 || Math.abs(targetY - ly) > 0.05) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
-  const schedule = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
+  const following = createCircularPointerFollowing({
+    root,
+    smoothing,
+    onAnimate: () => {
+      update();
+      draw();
+    },
+  });
 
   const clear = () => {
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    targetX = e.clientX - rect.left - root.clientLeft;
-    targetY = e.clientY - rect.top - root.clientTop;
-    schedule();
-  };
-
-  const radius = size / 2;
-  const isWithinRingReach = (clientX: number, clientY: number) => {
-    const rect = root.getBoundingClientRect();
-    const x = clientX - rect.left - root.clientLeft;
-    const y = clientY - rect.top - root.clientTop;
-    return x >= -radius && x <= rect.width + radius && y >= -radius && y <= rect.height + radius;
+    following.cancelAnimation();
+    clearCircularFollowerCanvas(ctx, canvas);
   };
 
   /** 指针下实际命中是否在 root 子树内（跳过 pointer-events:none 的层后），避免被外部遮罩盖住仍触发 */
@@ -295,9 +161,8 @@ export function mountInvertRing(
   const activate = () => {
     if (active) return;
     active = true;
-    acquireCursor();
+    releaseCursorLock = acquireRootCursorLock(root);
     show();
-    // 仅激活后绘制描边；避免 init 时 canvas 已画环、viewport 隐藏仍露出描边
     update();
     draw();
   };
@@ -306,86 +171,41 @@ export function mountInvertRing(
     active = false;
     clear();
     hide();
-    releaseCursor();
-  };
-  const onWindowMove = (e: PointerEvent) => {
-    if (!pointerHitsRoot(e.clientX, e.clientY)) {
-      deactivate();
-      return;
-    }
-    if (isWithinRingReach(e.clientX, e.clientY)) {
-      activate();
-      onMove(e);
-    } else {
-      deactivate();
-    }
+    releaseCursorLock?.();
+    releaseCursorLock = undefined;
+    following.resetPressScale();
   };
 
-  const onRootPointerEnter = (e: PointerEvent) => {
-    if (!pointerHitsRoot(e.clientX, e.clientY)) return;
-    if (isWithinRingReach(e.clientX, e.clientY)) {
-      activate();
-      onMove(e);
-    }
-  };
-  const onWindowBlur = () => {
-    deactivate();
-  };
-  const onVisibilityChange = () => {
-    if (document.visibilityState !== "visible") {
-      deactivate();
-    }
-  };
+  following.initializeFromRootCenter();
 
-  const onDown = () => {
-    pressScale = 0.85;
-    update();
-    draw();
-    schedule();
-  };
-  const onUp = () => {
-    pressScale = 1;
-    update();
-    draw();
-    schedule();
-  };
-
-  lx = root.clientWidth / 2;
-  ly = root.clientHeight / 2;
-  targetX = lx;
-  targetY = ly;
+  const reachBinding = bindRingReachPointerFollowing({
+    root,
+    radius: size / 2,
+    following,
+    onActivate: activate,
+    onDeactivate: deactivate,
+    shouldAcceptPointer: pointerHitsRoot,
+    listenRootPointerEnter: true,
+  });
 
   const ro = observeRootResize(() => {
-    syncContentSize();
+    rootSnapshot.syncSize();
     update();
-    if (active) draw();
+    if (active) {
+      draw();
+    }
   });
   root.appendChild(viewport);
   root.appendChild(canvas);
-  root.addEventListener("pointerenter", onRootPointerEnter);
-  root.addEventListener("pointerdown", onDown);
-  root.addEventListener("pointerup", onUp);
-  window.addEventListener("pointermove", onWindowMove);
-  window.addEventListener("blur", onWindowBlur);
-  document.addEventListener("visibilitychange", onVisibilityChange);
 
-  syncContentSize();
+  rootSnapshot.syncSize();
   update();
   clear();
-  // 初始隐藏：避免未进入/离开状态下停留在中心
   viewport.style.display = "none";
 
   return {
     destroy() {
-      root.removeEventListener("pointerenter", onRootPointerEnter);
-      root.removeEventListener("pointerdown", onDown);
-      root.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointermove", onWindowMove);
-      window.removeEventListener("blur", onWindowBlur);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      if (raf) {
-        cancelAnimationFrame(raf);
-      }
+      reachBinding.destroy();
       deactivate();
       ro.disconnect();
       canvas.remove();
@@ -394,4 +214,3 @@ export function mountInvertRing(
     },
   };
 }
-

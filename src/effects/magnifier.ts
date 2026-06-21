@@ -1,5 +1,9 @@
 import type { Destroyable, MagnifierOptions } from "../types";
 import { createCanvasLayer } from "../utils/canvas-layer";
+import { createCircularPointerFollowing } from "../utils/circular-pointer-following";
+import { acquireRootCursorLock } from "../utils/root-cursor-lock";
+import { createRootSnapshot } from "../utils/root-snapshot";
+import { alignSnapshotLens } from "../utils/snapshot-lens-alignment";
 
 /**
  * 放大镜效果（圈内放大）：
@@ -24,8 +28,7 @@ export function mountMagnifier(
   const lensSaturate = options.lensSaturate ?? 1.25;
   const lensFillOpacity = options.lensFillOpacity ?? 0.06;
 
-  const prevCursor = root.style.cursor;
-  root.style.cursor = "none";
+  const releaseCursorLock = acquireRootCursorLock(root);
 
   const layer = createCanvasLayer(root, {
     "data-magic-cursor-magnifier": "",
@@ -54,125 +57,30 @@ export function mountMagnifier(
     "z-index:2147482999",
   ].join(";");
 
-  const lensContent = document.createElement("div");
-  lensContent.setAttribute("data-magic-cursor-magnifier-content", "");
-  lensContent.style.cssText = [
-    "position:absolute",
-    "left:0",
-    "top:0",
-    "pointer-events:none",
-    "transform-origin:0 0",
-    "will-change:transform",
-  ].join(";");
-
-  const syncContentSize = () => {
-    // 关键：放大内容的坐标系必须与 root 一致（否则绝对定位/文字布局会错位）
-    const w = root.clientWidth;
-    const h = root.clientHeight;
-    lensContent.style.width = `${w}px`;
-    lensContent.style.height = `${h}px`;
-  };
-
-  // 生成一次静态快照：背景 + 子树（排除 magic-cursor 自己的 overlay）
-  const computed = getComputedStyle(root);
-  const layout = document.createElement("div");
-  layout.setAttribute("data-magic-cursor-magnifier-layout", "");
-  // 关键：复刻 root 的布局/排版，避免普通文档流文本在镜片中错位或不可见
-  layout.className = root.className;
-  layout.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "pointer-events:none",
-    "isolation:isolate",
-    "background:transparent",
-  ].join(";");
-  lensContent.appendChild(layout);
-
-  const flow = document.createElement("div");
-  flow.setAttribute("data-magic-cursor-magnifier-flow", "");
-  flow.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "width:100%",
-    "height:100%",
-    "z-index:1",
-    `display:${computed.display}`,
-    `box-sizing:${computed.boxSizing}`,
-    `padding:${computed.paddingTop} ${computed.paddingRight} ${computed.paddingBottom} ${computed.paddingLeft}`,
-    `flex-direction:${computed.flexDirection}`,
-    `flex-wrap:${computed.flexWrap}`,
-    `justify-content:${computed.justifyContent}`,
-    `align-items:${computed.alignItems}`,
-    `align-content:${computed.alignContent}`,
-    `place-items:${computed.placeItems}`,
-    `place-content:${computed.placeContent}`,
-    `color:${computed.color}`,
-    `font:${computed.font}`,
-    `text-align:${computed.textAlign}`,
-    `line-height:${computed.lineHeight}`,
-    `letter-spacing:${computed.letterSpacing}`,
-    `white-space:${computed.whiteSpace}`,
-  ].join(";");
-  layout.appendChild(flow);
-
-  const snapshot = document.createElement("div");
-  snapshot.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "pointer-events:none",
-    "z-index:0",
-  ].join(";");
-  snapshot.style.backgroundColor = computed.backgroundColor;
-  snapshot.style.backgroundImage = computed.backgroundImage;
-  snapshot.style.backgroundPosition = computed.backgroundPosition;
-  snapshot.style.backgroundRepeat = computed.backgroundRepeat;
-  snapshot.style.backgroundSize = computed.backgroundSize;
-  layout.appendChild(snapshot);
-
-  for (const node of Array.from(root.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      if ((node.textContent ?? "").trim().length === 0) continue;
-      flow.appendChild(node.cloneNode(true));
-      continue;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) continue;
-
-    const el = node as HTMLElement;
-    if (el.dataset.magicCursorSpotlight !== undefined) continue;
-    if (el.dataset.magicCursorTrail !== undefined) continue;
-    if (el.dataset.magicCursorRing !== undefined) continue;
-    if (el.dataset.magicCursorMagnifier !== undefined) continue;
-    if (el.dataset.magicCursorMagnifierLens !== undefined) continue;
-    if (el.dataset.magicCursorMagnifierContent !== undefined) continue;
-    if (el.dataset.magicCursorInvertRing !== undefined) continue;
-    flow.appendChild(el.cloneNode(true));
-  }
+  const rootSnapshot = createRootSnapshot(root);
+  const lensContent = rootSnapshot.element;
 
   lensViewport.appendChild(lensContent);
 
-  let lx = 0;
-  let ly = 0;
-  let targetX = 0;
-  let targetY = 0;
-  let raf = 0;
-  let pressScale = 1;
-
   const updateLens = () => {
-    lensViewport.style.left = `${lx}px`;
-    lensViewport.style.top = `${ly}px`;
-    lensViewport.style.transform = `translate(-50%,-50%) scale(${pressScale})`;
-
-    // 关键：将 “光标下的点” 放大后对齐到镜片中心
-    // x' = x*zoom + tx = size/2  => tx = size/2 - x*zoom
-    const tx = size / 2 - lx * zoom;
-    const ty = size / 2 - ly * zoom;
-    lensContent.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+    const { x: lx, y: ly } = following.getPosition();
+    alignSnapshotLens(
+      {
+        viewport: lensViewport,
+        content: lensContent,
+        lensSize: size,
+        zoom,
+      },
+      { x: lx, y: ly, pressScale: following.getPressScale() },
+    );
   };
 
   const draw = () => {
     const bw = canvas.width;
     const bh = canvas.height;
     const dpr = layer.getDpr();
+    const { x: lx, y: ly } = following.getPosition();
+    const pressScale = following.getPressScale();
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, bw, bh);
@@ -188,53 +96,31 @@ export function mountMagnifier(
     ctx.stroke();
   };
 
-  const tick = () => {
-    raf = 0;
-    lx += (targetX - lx) * smoothing;
-    ly += (targetY - ly) * smoothing;
-    updateLens();
-    draw();
-    if (Math.abs(targetX - lx) > 0.05 || Math.abs(targetY - ly) > 0.05) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
-
-  const schedule = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(tick);
-    }
-  };
+  const following = createCircularPointerFollowing({
+    root,
+    smoothing,
+    onAnimate: () => {
+      updateLens();
+      draw();
+    },
+  });
 
   const onMove = (e: PointerEvent) => {
-    const rect = root.getBoundingClientRect();
-    // 绝对定位子元素以 padding box 为参照；这里将坐标也转换到 content box 坐标系
-    targetX = e.clientX - rect.left - root.clientLeft;
-    targetY = e.clientY - rect.top - root.clientTop;
-    schedule();
+    following.followPointerEvent(e);
   };
 
   const onDown = () => {
-    pressScale = 0.85;
-    updateLens();
-    draw();
-    schedule();
+    following.handlePressStart();
   };
   const onUp = () => {
-    pressScale = 1;
-    updateLens();
-    draw();
-    schedule();
+    following.handlePressEnd();
   };
 
-  lx = root.clientWidth / 2;
-  ly = root.clientHeight / 2;
-  targetX = lx;
-  targetY = ly;
+  following.initializeFromRootCenter();
 
   const ro = observeRootResize(() => {
-    syncContentSize();
-    updateLens();
-    draw();
+    rootSnapshot.syncSize();
+    following.redraw();
   });
   root.appendChild(lensViewport);
   root.appendChild(canvas);
@@ -242,24 +128,20 @@ export function mountMagnifier(
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);
 
-  syncContentSize();
-  updateLens();
-  draw();
+  rootSnapshot.syncSize();
+  following.redraw();
 
   return {
     destroy() {
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointerup", onUp);
-      if (raf) {
-        cancelAnimationFrame(raf);
-      }
+      following.cancelAnimation();
       ro.disconnect();
       canvas.remove();
       lensViewport.remove();
       teardownLayout();
-      root.style.cursor = prevCursor;
+      releaseCursorLock();
     },
   };
 }
-

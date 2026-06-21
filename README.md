@@ -106,6 +106,7 @@ Exported types include `EffectName`, `Destroyable`, and per-effect `*Options` (e
 - **Browser-only**: for SSR apps (e.g. Next.js), mount effects on the client only (`useEffect`, `onMounted`, or dynamic import with `ssr:false`).
 - **Avoid double-mount**: call `destroy()` before re-mounting to prevent duplicated listeners / leftover layers.
 - **`magnifier` / `invertRing` snapshot**: the content snapshot is taken on mount; if your content changes dynamically, re-mount to refresh.
+- **Snapshot limits**: snapshots are approximate DOM mirrors that exclude `data-magic-cursor-*` overlay nodes. Pseudo-elements, video, canvas, and iframes are not guaranteed to be reproduced.
 
 ### Development (this repo)
 
@@ -230,6 +231,7 @@ fx.destroy();
 - **仅浏览器环境**：在 SSR（例如 Next.js）中请只在客户端挂载（`useEffect` / `onMounted` / 动态导入 `ssr:false`）。
 - **不要重复挂载**：重复创建前先 `destroy()`，避免事件监听/层叠节点残留。
 - **`magnifier` / `invertRing` 的内容快照**：当前为挂载时的静态快照；如果容器内容会频繁变化，需要重新挂载以更新快照。
+- **快照限制**：快照是近似 DOM 镜像，会排除 `data-magic-cursor-*` overlay 节点；伪元素、视频、canvas、iframe 不保证复刻。
 
 ### 本仓库开发
 
